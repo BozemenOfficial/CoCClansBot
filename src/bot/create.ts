@@ -11,7 +11,7 @@ import { playerHandlers } from './player';
 export function createBot(config: Config, store: Store, budget: RequestBudget) {
   const request = boundedFetch(budget);
   const bot = new Bot(config.BOT_TOKEN, { client: { fetch: request, timeoutSeconds: 6 } });
-  const clash = new ClashClient(config, request);
+  const clash = new ClashClient(config, request,store);
   const botId = Number(config.BOT_TOKEN.split(':')[0]);
   const sync = new SyncService(store, clash, bot.api, botId, budget, config.SYNC_BATCH_SIZE);
   bot.use(async (ctx, next) => {
@@ -19,12 +19,13 @@ export function createBot(config: Config, store: Store, budget: RequestBudget) {
     await next();
   });
   const jobs = new SyncJobs(store, sync, bot.api);
-  adminCommands(bot, store, clash, jobs);
+  adminCommands(bot, store, clash, jobs, config.BOT_OWNER_ID);
   playerHandlers(bot, config.MINI_APP_URL);
   bot.on('chat_member', async (ctx) => {
     const member = ctx.chatMember.new_chat_member;
-    if (!member.user.is_bot && ['member', 'restricted'].includes(member.status) && await store.group(ctx.chat.id)) {
-      await sync.run({ user: member.user.id, chat: ctx.chat.id });
+    if (!member.user.is_bot && await store.group(ctx.chat.id)) {
+      const present = ['creator','administrator','member'].includes(member.status) || (member.status === 'restricted' && member.is_member);
+      await store.membership(ctx.chat.id,member.user.id,present);
     }
   });
   return { bot, sync, jobs };

@@ -87,7 +87,7 @@ function render(data) {
   text('settings-name', player?.name || 'Игровой аккаунт');
   text('settings-tag', player?.tag || '—');
   groups(); navigate(currentTab);
-  if (data.notice) notice(data.notice);
+  if (data.notice) notice(data.notice + (data.updatedAt ? ' Обновлено: ' + new Date(data.updatedAt*1000).toLocaleString('ru-RU') : ''));
 }
 async function api(path, data) {
   const response = await fetch('/api/' + path, {
@@ -134,7 +134,7 @@ $('sync-toggle').addEventListener('change', () => {
 $('unlink').addEventListener('click', () => $('unlink-dialog').showModal());
 $('cancel-unlink').addEventListener('click', () => $('unlink-dialog').close());
 $('confirm-unlink').addEventListener('click', () => {
-  void action(async () => { const data = await api('unlink', { confirm: true }); $('unlink-dialog').close(); currentTab = 'profile'; render(data); notice('Аккаунт отвязан. Можно привязать другой.'); });
+  void action(async () => { const data = await api('unlink', { confirm: true }); $('unlink-dialog').close(); currentTab = 'profile'; render(data); notice(data.cleanupIncomplete ? 'Привязка удалена, но очистка тега не завершена. Обратись к администратору.' : 'Аккаунт отвязан. Можно привязать другой.'); });
 });
 for (const button of document.querySelectorAll('[data-tab],[data-navigate]')) button.addEventListener('click', () => navigate(button.dataset.tab || button.dataset.navigate));
 async function load() {

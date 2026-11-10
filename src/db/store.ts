@@ -42,6 +42,8 @@ export class Store {
     return !row || row.count > max;
   }
   async setup(chatId: number, title: string, by: number, clan: Clan): Promise<void> {
+    const old = await this.group(chatId);
+    if (old?.clan_tag === clan.tag) return;
     await this.db.batch([
       this.query(`INSERT INTO telegram_groups(chat_id,title,configured_by,updated_at) VALUES (?,?,?,unixepoch())
         ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title,configured_by=excluded.configured_by,updated_at=excluded.updated_at`, chatId, title, by),
@@ -49,7 +51,9 @@ export class Store {
         ON CONFLICT(chat_id) DO UPDATE SET clan_tag=excluded.clan_tag,clan_name=excluded.clan_name,
         moderation_enabled=excluded.moderation_enabled,roster_count=excluded.roster_count`, chatId, clan.tag, clan.name, 0, clan.members ?? 0),
       this.query('DELETE FROM sync_state WHERE chat_id=?', chatId),
-      this.query('UPDATE players SET next_sync_at=0,next_group=0'),
+      this.query('DELETE FROM sync_jobs WHERE chat_id=?', chatId),
+      this.query('DELETE FROM group_memberships WHERE chat_id=?', chatId),
+      this.query(`INSERT INTO group_memberships(chat_id,telegram_id) SELECT ?,l.telegram_id FROM account_links l JOIN players p USING(player_tag) WHERE p.clan_tag=?`, chatId, clan.tag),
       this.query('DELETE FROM manual_sync_cursors WHERE chat_id=?', chatId),
     ]);
   }
@@ -74,12 +78,10 @@ export class Store {
       : this.query('SELECT telegram_id,player_tag FROM account_links WHERE telegram_id=? AND sync_enabled=1', user)).all<Link>()).results;
   }
   async manualBatch(chat: number, limit: number): Promise<Link[]> {
-    const rows = (await this.query(`SELECT telegram_id,player_tag FROM account_links
-      WHERE sync_enabled=1 AND player_tag > coalesce((SELECT player_tag FROM manual_sync_cursors WHERE chat_id=?),'')
-      ORDER BY player_tag LIMIT ?`, chat, limit).all<Link>()).results;
-    if (rows.length) return rows;
-    await this.manualCursor(chat, '');
-    return (await this.query('SELECT telegram_id,player_tag FROM account_links WHERE sync_enabled=1 ORDER BY player_tag LIMIT ?', limit).all<Link>()).results;
+    return (await this.query(`SELECT l.telegram_id,l.player_tag FROM account_links l JOIN group_memberships m USING(telegram_id)
+      WHERE m.chat_id=? AND m.present=1 AND l.sync_enabled=1
+      AND l.player_tag > coalesce((SELECT player_tag FROM manual_sync_cursors WHERE chat_id=?),'')
+      ORDER BY l.player_tag LIMIT ?`, chat,chat,limit).all<Link>()).results;
   }
   async manualCursor(chat: number, tag: string): Promise<void> {
     await this.query(`INSERT INTO manual_sync_cursors(chat_id,player_tag) VALUES (?,?)
@@ -125,7 +127,7 @@ export class Store {
   async queueSync(chat: number, by: number): Promise<void> {
     await this.db.batch([
       this.query(`INSERT INTO sync_jobs(chat_id,requested_by) VALUES (?,?) ON CONFLICT(chat_id) DO UPDATE SET
-        requested_by=excluded.requested_by,state='pending',checked=0,updated=0,skipped=0,failed=0,notified=0,created_at=unixepoch()`, chat, by),
+        requested_by=excluded.requested_by,state='pending',checked=0,updated=0,skipped=0,failed=0,notified=0,available_at=0,attempts=0,last_run=0,created_at=unixepoch()`, chat, by),
       this.query('DELETE FROM manual_sync_cursors WHERE chat_id=?', chat),
     ]);
   }
@@ -133,10 +135,10 @@ export class Store {
     return this.query('SELECT * FROM sync_jobs WHERE chat_id=?', chat).first<SyncJob>();
   }
   async nextSyncJob(): Promise<SyncJob | null> {
-    return this.query("SELECT * FROM sync_jobs WHERE state='pending' OR notified=0 ORDER BY CASE state WHEN 'pending' THEN 0 ELSE 1 END,created_at,chat_id LIMIT 1").first<SyncJob>();
+    return this.query("SELECT * FROM sync_jobs WHERE (state='pending' OR notified=0) AND available_at <= unixepoch() ORDER BY last_run,created_at,chat_id LIMIT 1").first<SyncJob>();
   }
   async progressSyncJob(chat: number, result: { checked: number; updated: number; skipped: number; failed: number; partial: boolean }): Promise<void> {
-    await this.query(`UPDATE sync_jobs SET checked=checked+?,updated=updated+?,skipped=skipped+?,failed=failed+?,state=? WHERE chat_id=?`,
+    await this.query(`UPDATE sync_jobs SET checked=checked+?,updated=updated+?,skipped=skipped+?,failed=failed+?,state=?,last_run=unixepoch() WHERE chat_id=?`,
       result.checked,result.updated,result.skipped,result.failed,result.partial ? 'pending' : 'done',chat).run();
   }
   async notifiedSyncJob(chat: number): Promise<void> {
@@ -162,6 +164,44 @@ export class Store {
       this.query('DELETE FROM conversations WHERE telegram_id=?', id),
       this.query('DELETE FROM account_links WHERE telegram_id=?', id),
     ]);
+  }
+  async membership(chat: number, user: number, present: boolean): Promise<void> {
+    await this.user(user);
+    await this.query(`INSERT INTO group_memberships(chat_id,telegram_id,present) VALUES (?,?,?)
+      ON CONFLICT(chat_id,telegram_id) DO UPDATE SET present=excluded.present`,chat,user,present ? 1 : 0).run();
+  }
+  async discover(chat: number, clan: string): Promise<void> {
+    await this.query(`INSERT OR IGNORE INTO group_memberships(chat_id,telegram_id)
+      SELECT ?,l.telegram_id FROM account_links l JOIN players p USING(player_tag) WHERE p.clan_tag=?`,chat,clan).run();
+  }
+  async admitted(user: number): Promise<boolean> {
+    return !!await this.query('SELECT 1 FROM group_memberships WHERE telegram_id=? AND present=1 LIMIT 1',user).first();
+  }
+  async reserveInitial(user: number, tag: string): Promise<boolean> {
+    const row = await this.query(`INSERT INTO sync_history(telegram_id,next_allowed_at) VALUES (?,unixepoch()+3600)
+      ON CONFLICT(telegram_id) DO UPDATE SET next_allowed_at=excluded.next_allowed_at WHERE sync_history.next_allowed_at<=unixepoch()
+      RETURNING telegram_id`,user).first();
+    await this.query(`UPDATE players SET next_sync_at=max(next_sync_at,coalesce((SELECT next_allowed_at FROM sync_history WHERE telegram_id=?),0)) WHERE player_tag=?`,user,tag).run();
+    return !!row;
+  }
+  async recordSync(user: number): Promise<void> {
+    await this.query(`INSERT INTO sync_history VALUES (?,unixepoch()+3600) ON CONFLICT(telegram_id)
+      DO UPDATE SET next_allowed_at=max(next_allowed_at,excluded.next_allowed_at)`,user).run();
+  }
+  async deferJob(chat: number, delay: number): Promise<void> {
+    await this.query(`UPDATE sync_jobs SET attempts=attempts+1,available_at=unixepoch()+?,last_run=unixepoch(),
+      state=CASE WHEN attempts>=4 THEN 'done' ELSE state END,notified=CASE WHEN attempts>=4 AND state='done' THEN 1 ELSE notified END WHERE chat_id=?`,delay,chat).run();
+  }
+  async audit(chat: number, actor: number, subject: number, reason: string): Promise<void> {
+    await this.query("INSERT INTO admin_audit(chat_id,actor,subject,action,reason) VALUES (?,?,?,'reset_link',?)",chat,actor,subject,reason).run();
+  }
+  async cached(key: string): Promise<{payload: string; updated_at: number} | null> {
+    return this.query('SELECT payload,updated_at FROM game_cache WHERE cache_key=?',key).first();
+  }
+  async cache(key: string, value: unknown): Promise<void> {
+    await this.query(`INSERT INTO game_cache(cache_key,payload) VALUES (?,?) ON CONFLICT(cache_key)
+      DO UPDATE SET payload=excluded.payload,updated_at=unixepoch()`,key,JSON.stringify(value)).run();
+    await this.query('DELETE FROM game_cache WHERE cache_key IN (SELECT cache_key FROM game_cache ORDER BY updated_at DESC LIMIT -1 OFFSET 500)').run();
   }
   async cleanup(): Promise<void> {
     await this.db.batch([

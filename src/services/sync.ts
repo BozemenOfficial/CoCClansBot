@@ -18,7 +18,7 @@ export interface TelegramApi {
   getChatMember(chat: number, user: number): Promise<Member>;
   setChatMemberTag(chat: number, user: number, tag: string): Promise<unknown>;
 }
-export interface SyncResult { checked: number; updated: number; skipped: number; failed: number; busy: boolean; partial: boolean }
+export interface SyncResult { checked: number; updated: number; skipped: number; failed: number; busy: boolean; partial: boolean; retryAfter?: number }
 
 export class SyncService {
   constructor(
@@ -86,6 +86,7 @@ export class SyncService {
             continue;
           }
           const member = await this.telegram.getChatMember(group.chat_id, link.telegram_id);
+          await this.store.membership(group.chat_id,link.telegram_id, ['member','administrator','creator'].includes(member.status) || (member.status === 'restricted' && !!member.is_member));
           if (member.status === 'administrator' || member.status === 'creator') {
             await this.store.saveState(group.chat_id, link.telegram_id, null, 'administrator');
             result.skipped++;
@@ -117,6 +118,7 @@ export class SyncService {
           await this.store.saveState(group.chat_id, link.telegram_id, null, retry ? 'rate_limited' : 'telegram_error');
           result.failed++;
           if (retry) {
+            result.retryAfter = Math.max(result.retryAfter ?? 0,retry);
             if (options.chat === undefined) {
               await this.store.groupCursor(player.tag, i);
               await this.store.postpone(player.tag, retry);
@@ -125,6 +127,7 @@ export class SyncService {
           }
         }
       }
+      await this.store.recordSync(link.telegram_id);
       if (options.chat === undefined) {
         await this.store.groupCursor(player.tag, 0);
         await this.store.postpone(player.tag, 3600);

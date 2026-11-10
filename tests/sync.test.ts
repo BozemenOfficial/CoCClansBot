@@ -59,7 +59,7 @@ describe('tag synchronization', () => {
     await db.store.setup(-200, 'Other group', 10, { tag: '#Q2Y', name: 'Other' });
     await make().run({ chat: -200 });
     expect(await db.store.state(-100, 10)).toBeNull();
-    expect((await db.store.state(-200, 10))?.outcome).toBe('not_in_clan');
+    expect(await db.store.state(-200, 10)).toBeNull();
     expect((await db.store.group(-100))?.clan_tag).toBe('#Q0Y');
   });
   it('does not overlap a cron and a manual sync', async () => {

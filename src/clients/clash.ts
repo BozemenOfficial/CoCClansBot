@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Store } from '../db/store';
 import type { Config } from '../config';
 import { ServiceError } from '../errors';
 import type { Fetcher } from './http';
@@ -26,10 +27,15 @@ export class ClashClient implements ClashApi {
   private readonly players = new Map<string, Player>();
   private readonly clans = new Map<string, Clan>();
   get available(): boolean { return this.config.COC_TRANSPORT !== 'disabled'; }
-  constructor(private readonly config: Config, private readonly request: Fetcher = fetch) {}
+  constructor(private readonly config: Config, private readonly request: Fetcher = fetch, private readonly store?: Store, private readonly ttl = 0) {}
 
   private async call(path: string, body?: object): Promise<unknown> {
     if (!this.available) throw new ServiceError('integration_not_configured');
+    if (!body && this.store) {
+      const cached = await this.store.cached(path);
+      if (this.ttl && cached && cached.updated_at > Math.floor(Date.now()/1000)-this.ttl) return JSON.parse(cached.payload);
+      if (await this.store.limited(`game:${path}`,20,60)) throw new ServiceError('rate_limited',60);
+    }
     const token = this.config.COC_TRANSPORT === 'gateway'
       ? this.config.COC_GATEWAY_TOKEN : this.config.COC_API_TOKEN;
     let response: Response;
@@ -53,7 +59,7 @@ export class ClashClient implements ClashApi {
       }
       throw new ServiceError('upstream_unavailable');
     }
-    try { return await response.json(); } catch { throw new ServiceError('invalid_response'); }
+    try { const value: unknown = await response.json(); if (!body && this.store) await this.store.cache(path,value); return value; } catch { throw new ServiceError('invalid_response'); }
   }
   async player(tag: string): Promise<Player> {
     const cached = this.players.get(tag);

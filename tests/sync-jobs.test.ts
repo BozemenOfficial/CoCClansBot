@@ -14,7 +14,7 @@ beforeEach(async () => {
   await db.store.user(1); await db.store.setup(-100, 'Group', 1, player.clan!);
   const tags = ['#P00', '#P02', '#P08', '#P09', '#P0Y', '#P0L', '#P0Q', '#P0R'];
   for (const [index, tag] of tags.entries()) {
-    await db.store.user(10 + index); await db.store.bind(10 + index, { ...player, tag });
+    await db.store.user(10 + index); await db.store.bind(10 + index, { ...player, tag }); await db.store.membership(-100,10+index,true);
   }
 });
 afterEach(() => db.sqlite.close());
@@ -44,7 +44,17 @@ it('retries a failed completion notification without rerunning nickname updates'
   for (let i = 0; i < 3; i++) await jobs().runNext();
   expect(await db.store.syncJob(-100)).toMatchObject({ state: 'done', notified: 0 });
   const writes = telegram.setChatMemberTag.mock.calls.length;
+  db.sqlite.exec('UPDATE sync_jobs SET available_at=0');
   expect(await jobs().runNext()).toBe(false);
   expect(telegram.setChatMemberTag).toHaveBeenCalledTimes(writes);
   expect(await db.store.syncJob(-100)).toMatchObject({ notified: 1 });
+});
+
+it('defers a rate limited batch using Telegram retry_after',async()=>{
+ await jobs().enqueue(-100,1);
+ telegram.setChatMemberTag.mockRejectedValueOnce({parameters:{retry_after:900}});
+ await jobs().runNext();
+ const row=db.sqlite.prepare('SELECT available_at-unixepoch() AS delay FROM sync_jobs').get();
+ expect(row?.delay).toBe(900);
+ expect(await db.store.nextSyncJob()).toBeNull();
 });

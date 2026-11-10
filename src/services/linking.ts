@@ -16,7 +16,7 @@ export class LinkingService {
     if (this.isMember) {
       let joined = false;
       for (const group of groups.filter((g) => g.clan_tag === player.clan!.tag)) {
-        if (await this.isMember(group.chat_id, id)) { joined = true; break; }
+        if (await this.isMember(group.chat_id, id)) { await this.store.membership(group.chat_id,id,true); joined = true; }
       }
       if (!joined) return { status: 'not_group_member' };
     }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export interface Env {
   DB: D1Database;
+  BOT_OWNER_ID?: string;
   BOT_TOKEN: string;
   WEBHOOK_SECRET: string;
   COC_API_TOKEN?: string;
@@ -14,6 +15,7 @@ export interface Env {
 }
 
 const schema = z.object({
+  BOT_OWNER_ID: z.coerce.number().int().positive().safe().optional(),
   BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/),
   WEBHOOK_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/),
   COC_TRANSPORT: z.enum(['direct', 'royaleapi', 'gateway', 'disabled']).default('direct'),

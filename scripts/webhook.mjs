@@ -22,6 +22,7 @@ try {
   await api('setMyCommands', { scope: { type: 'all_private_chats' }, commands: [{ command: 'start', description: 'Открыть приложение' }] });
   await api('setMyCommands', { scope: { type: 'all_group_chats' }, commands: [
     { command: 'setup', description: 'Подключить клан: /setup #тег (админ)' },
+    { command: 'resetlink', description: 'Сброс спорной привязки: ID и причина (админ)' },
     { command: 'status', description: 'Состояние подключения (админ)' },
     { command: 'sync', description: 'Обновить всех участников группы (админ)' },
   ] });

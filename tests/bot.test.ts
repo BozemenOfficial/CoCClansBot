@@ -40,7 +40,7 @@ function message(text: string, group = false, anonymous = false): Update {
   } };
 }
 async function bot() {
-  const config = readConfig({ DB: db.store.db, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key' });
+  const config = readConfig({ DB: db.store.db, BOT_OWNER_ID: '10', BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key' });
   const { bot } = createBot(config, db.store, new RequestBudget());
   bot.botInfo = await bot.api.getMe();
   return bot;
@@ -72,7 +72,7 @@ it('does not start a token conversation in a group', async () => {
 
 it('rejects unauthenticated webhooks and deduplicates accepted updates', async () => {
   const { default: worker } = await import('../src/index');
-  const env = { DB: db.store.db, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key' };
+  const env = { DB: db.store.db, BOT_OWNER_ID: '10', BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key' };
   const request = (secret: string) => new Request('https://example.com/webhook', {
     method: 'POST', headers: { 'content-type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': secret },
     body: JSON.stringify(message('/start')),
@@ -86,7 +86,7 @@ it('rejects unauthenticated webhooks and deduplicates accepted updates', async (
 });
 
 it('keeps the menu available and does not request player tokens when the game integration is disabled', async () => {
-  const config = readConfig({ DB: db.store.db, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_TRANSPORT: 'disabled' });
+  const config = readConfig({ DB: db.store.db, BOT_OWNER_ID: '10', BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_TRANSPORT: 'disabled' });
   const { bot: app } = createBot(config, db.store, new RequestBudget());
   app.botInfo = await app.api.getMe();
   await app.handleUpdate(message('/start'));
@@ -113,4 +113,19 @@ it('queues all registered users when an administrator forces group sync', async 
   await app.handleUpdate(message('/sync', true));
   expect((await db.store.syncJob(-100))?.state).toBe('done');
   expect(calls.some((c) => c.method === 'restrictChatMember')).toBe(false);
+});
+
+it('denies new group activation when owner ID is not configured', async () => {
+  const config = readConfig({ DB: db.store.db, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key' });
+  const {bot: app}=createBot(config,db.store,new RequestBudget());app.botInfo=await app.api.getMe();admin=true;
+  await app.handleUpdate(message('/setup #Q0Y',true));
+  expect(await db.store.group(-100)).toBeNull();
+});
+
+it('does not allow one group administrator to reset another group link',async()=>{
+ const app=await bot();admin=true;await db.store.user(10);await db.store.user(11);await db.store.bind(11,player);
+ await db.store.setup(-100,'Here',10,player.clan!);await db.store.setup(-200,'Other',10,player.clan!);
+ await app.handleUpdate(message('/resetlink 11 спорный аккаунт',true));
+ expect(await db.store.link(11)).not.toBeNull();
+ expect(db.sqlite.prepare('SELECT count(*) AS n FROM admin_audit').get()?.n).toBe(0);
 });

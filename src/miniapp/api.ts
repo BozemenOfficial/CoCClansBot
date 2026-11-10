@@ -7,6 +7,7 @@ import { createBot } from '../bot/create';
 import { LinkingService } from '../services/linking';
 import { memberTag, playerTagSchema } from '../validation/player';
 import { userError } from '../errors';
+import { unlinkAccount } from '../services/unlink';
 import { authenticate } from './auth';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -42,22 +43,25 @@ export async function appApi(request: Request, env: Env): Promise<Response> {
   const owner = crypto.randomUUID();
   let userLock = false;
   let syncLock = false;
+  let cleanupIncomplete = false;
   try {
     const config = readConfig(env);
     const budget = new RequestBudget();
-    const clash = new ClashClient(config, boundedFetch(budget));
+    const clash = new ClashClient(config, boundedFetch(budget),store,60);
     const { bot, sync } = createBot(config, store, budget);
     const state = async () => {
       const link = await store.link(user.id);
       const cached = link ? await store.cachedPlayer(user.id) : null;
       let player: unknown = cached ? { tag: cached.tag, name: cached.name, ...(cached.clan_tag ? { clan: { tag: cached.clan_tag, name: cached.clan_name } } : {}) } : null;
       let notice: string | null = null;
+      let stale = false;
+      let updatedAt = cached?.updated_at ?? null;
       if (link) {
-        try { player = await clash.player(link.player_tag); await store.refreshed(player as Awaited<ReturnType<typeof clash.player>>); }
-        catch { notice = 'Игра сейчас недоступна. Показан последний сохранённый профиль.'; }
+        try { player = await clash.player(link.player_tag); await store.refreshed(player as Awaited<ReturnType<typeof clash.player>>); updatedAt = (await store.cached(`/players/${encodeURIComponent(link.player_tag)}`))?.updated_at ?? Math.floor(Date.now()/1000); }
+        catch { stale = true; notice = 'Игра сейчас недоступна. Показан последний сохранённый профиль.'; }
       }
       return { user: { firstName: user.first_name }, linked: !!link, syncEnabled: link?.sync_enabled === 1,
-        player, tagPreview: player && typeof player === 'object' && 'name' in player ? memberTag(String(player.name)) : null, groups: await store.syncStates(user.id), notice };
+        updatedAt, stale, player, tagPreview: player && typeof player === 'object' && 'name' in player ? memberTag(String(player.name)) : null, groups: await store.syncStates(user.id), notice };
     };
     if (path === '/api/me') return json(await state());
     const data = await body(request);
@@ -91,16 +95,17 @@ export async function appApi(request: Request, env: Env): Promise<Response> {
     } else {
       const parsed = z.object({ confirm: z.literal(true) }).strict().safeParse(data);
       if (!parsed.success) return fail('Подтверди отвязку аккаунта.', 400);
-      await store.unlink(user.id);
+      cleanupIncomplete = await unlinkAccount(store,bot.api,user.id);
     }
+    const immediate = path === '/api/link' && await store.reserveInitial(user.id,(await store.link(user.id))!.player_tag);
     await store.release('sync', owner);
     syncLock = false;
     let result;
-    if (path === '/api/link') {
+    if (immediate) {
       try { result = await sync.run({ user: user.id }); }
       catch { result = { busy: false, failed: 1, partial: true, updated: 0 }; }
     }
-    return json({ ...await state(), ...(result ? { result } : {}) });
+    return json({ ...await state(), cleanupIncomplete, ...(result ? { result } : {}) });
   } catch (error) {
     return fail(userError(error), 503);
   } finally {

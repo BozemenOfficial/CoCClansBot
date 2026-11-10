@@ -78,7 +78,7 @@ export default {
     const { sync, jobs } = createBot(config, store, new RequestBudget());
     try {
       // Manual full-group jobs take priority; normal links are due every 3600 seconds.
-      if (await jobs.runNext()) return;
+      if (Math.floor(Date.now()/60000) % 2 === 0 && await jobs.runNext()) return;
       const result = await sync.run();
       console.info('scheduled_sync', JSON.stringify(result));
       await store.cleanup();
