@@ -18,16 +18,17 @@ async function api(method, body) {
   return result.result;
 }
 try {
-  await api('setMyCommands', { commands: [
-    { command: 'start', description: 'Главное меню' }, { command: 'link', description: 'Привязать аккаунт' },
-    { command: 'profile', description: 'Мой профиль' }, { command: 'cancel', description: 'Отменить привязку' },
-    { command: 'setup', description: 'Подключить клан: /setup #тег' }, { command: 'status', description: 'Состояние группы' },
-    { command: 'sync', description: 'Проверить участников группы' },
-    { command: 'reviews', description: 'Участники на проверке у администратора' },
+  await api('setMyCommands', { commands: [{ command: 'start', description: 'Открыть приложение' }] });
+  await api('setMyCommands', { scope: { type: 'all_private_chats' }, commands: [{ command: 'start', description: 'Открыть приложение' }] });
+  await api('setMyCommands', { scope: { type: 'all_group_chats' }, commands: [
+    { command: 'setup', description: 'Подключить клан: /setup #тег (админ)' },
+    { command: 'status', description: 'Состояние подключения (админ)' },
+    { command: 'sync', description: 'Обновить всех участников группы (админ)' },
   ] });
+  await api('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: new URL('/app/', url).href } } });
   await api('setWebhook', {
     url: WEBHOOK_URL, secret_token: WEBHOOK_SECRET, max_connections: 1,
-    allowed_updates: ['message', 'callback_query'], drop_pending_updates: false,
+    allowed_updates: ['message', 'callback_query', 'chat_member'], drop_pending_updates: false,
   });
   const info = await api('getWebhookInfo', {});
   if (info.url !== WEBHOOK_URL) throw new Error('Webhook URL did not match.');

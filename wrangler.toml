@@ -4,13 +4,19 @@ compatibility_date = "2026-11-10"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["* * * * *"] # Drain batches each minute; each account is due once per hour.
 
 [vars]
 COC_API_BASE_URL = "https://cocproxy.royaleapi.dev/v1"
 COC_TRANSPORT = "royaleapi"
 SYNC_BATCH_SIZE = "8"
+MINI_APP_URL = "https://coc-clans-bot.loopnexo.workers.dev/app/"
 
 [[d1_databases]]
 binding = "DB"

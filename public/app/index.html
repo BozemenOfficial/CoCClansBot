@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10141b">
+  <meta name="color-scheme" content="dark">
+  <title>CoC Clans — мой аккаунт</title>
+  <link rel="icon" href="/app/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/app/app.js" defer></script>
+</head>
+<body>
+<svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+ <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+ <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M5 15a8 8 0 0 0 13 3"/></symbol>
+ <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1v4l-2 2 2 3 3-1 2 2 1 4h4l1-4 3-1 2-3-2-2V7l-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="i-link" viewBox="0 0 24 24"><path d="m9 15 6-6M8 16l-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 12a4 4 0 0 0 6 0l5-5a4 4 0 0 0-6-6l-1 1" transform="translate(1 0) scale(.92)"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+ <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 1v7m-4 1h8"/></symbol>
+ <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7"/></symbol>
+</svg>
+<div class="app-shell">
+ <header class="topbar"><div class="brand"><span class="brand-mark"><svg><use href="#i-shield"/></svg></span><span>CoC<span class="brand-light">Clans</span></span></div><span class="version">первая версия</span></header>
+ <main>
+  <section id="loading" class="loading-state" aria-live="polite"><span class="loader"></span><h1>Открываем твой аккаунт</h1><p>Загружаем профиль из Telegram</p></section>
+  <section id="gate" class="gate" hidden><div class="large-mark"><svg><use href="#i-shield"/></svg></div><p class="eyebrow">ТВОЙ КЛАН. ТВОЙ АККАУНТ.</p><h1>Всё начинается<br>в Telegram</h1><p id="gate-message">Открой приложение через бота, чтобы безопасно войти в свой аккаунт.</p><a class="button primary" href="https://t.me/CoCClansBot?start=app">Открыть в Telegram <svg><use href="#i-arrow"/></svg></a><button id="retry" class="button secondary" hidden>Попробовать ещё раз</button></section>
+  <div id="content" hidden>
+   <section id="onboarding" hidden>
+    <div class="intro-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="art-tag art-tag-top">#PLAYER</span><div class="large-mark"><svg><use href="#i-shield"/></svg></div><span class="art-tag art-tag-bottom"><span class="dot"></span> Telegram ↔ Clash of Clans</span></div>
+    <p class="eyebrow">ОДНА ПРИВЯЗКА — И ГОТОВО</p><h1>Твой ник.<br>В твоём клане.</h1><p class="intro-copy">Свяжи игровой аккаунт с Telegram.<br>Бот поставит ник из игры в тег группы<br>и будет поддерживать его актуальным.</p>
+    <form id="link-form" class="card link-card"><label for="player-tag">Тег игрока</label><div class="input-wrap"><svg><use href="#i-link"/></svg><input id="player-tag" name="tag" placeholder="#G0VYC2RQ8" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="tag-hint"></div><p id="tag-hint" class="hint">Скопируй тег под ником в игровом профиле.</p><button type="submit" class="button primary">Привязать аккаунт <svg><use href="#i-arrow"/></svg></button><p class="form-footnote">Сначала вступи в группу подключённого клана.<br>Игровой токен и пароль не нужны.</p></form>
+    <p class="ownership-note">Привязка по свободному тегу из состава клана. Владение аккаунтом не проверяется.</p>
+   </section>
+   <div id="linked-content" hidden>
+    <section id="view-profile" class="view">
+     <div class="page-heading"><div><p class="eyebrow">ТВОЙ АККАУНТ</p><h1>Профиль</h1></div><button id="refresh-profile" class="icon-button" aria-label="Обновить данные профиля"><svg><use href="#i-sync"/></svg></button></div>
+     <article class="profile-card"><div class="profile-top"><div id="avatar" class="avatar">C</div><span class="pill"><span class="dot"></span> Аккаунт привязан</span></div><h2 id="player-name">—</h2><p id="player-id" class="player-id">—</p><div class="clan-line"><span class="clan-icon"><svg><use href="#i-shield"/></svg></span><div><span class="small-label">КЛАН</span><strong id="clan-name">—</strong></div><svg class="clan-check"><use href="#i-check"/></svg></div></article>
+     <div class="stats"><div class="stat card"><svg><use href="#i-home"/></svg><span class="small-label">РАТУША</span><strong id="townhall">—</strong></div><div class="stat card"><svg><use href="#i-trophy"/></svg><span class="small-label">КУБКИ</span><strong id="trophies">—</strong></div><div class="stat card"><span class="level-star">✧</span><span class="small-label">УРОВЕНЬ</span><strong id="level">—</strong></div></div>
+     <div class="section-title"><h3>Твой тег в группе</h3><span class="small-label">ПРЕДПРОСМОТР</span></div><div class="card tag-preview"><span class="mini-avatar" id="mini-avatar">C</span><div><strong id="telegram-name">Ты</strong><span id="group-tag" class="group-tag">—</span><p>Ник из Clash of Clans</p></div></div>
+     <button class="card sync-summary" data-navigate="sync"><span class="summary-icon"><svg><use href="#i-sync"/></svg></span><span><strong id="summary-status">Синхронизация включена</strong><small id="summary-detail">Обновляем ник раз в час</small></span><svg class="arrow"><use href="#i-arrow"/></svg></button>
+    </section>
+    <section id="view-sync" class="view" hidden><p class="eyebrow">ИГРА ↔ TELEGRAM</p><h1>Синхронизация</h1><p class="page-copy">Один ник в игре и в группе.<br>Бот обновит тег, если ты сменишь имя.</p><div class="card sync-state-card"><div class="sync-orb"><svg><use href="#i-sync"/></svg></div><h2 id="sync-title">Всё под контролем</h2><p id="sync-description">Автоматическая проверка раз в час.</p><span id="sync-pill" class="pill"><span class="dot"></span> Автосинхронизация включена</span></div><div class="section-title"><h3>Группы и последнее обновление</h3></div><div id="groups" class="group-list"></div><div class="info-note"><svg><use href="#i-shield"/></svg><p>Принудительно обновить всех привязанных участников может только администратор командой <strong>/sync</strong> в группе. Выключенная синхронизация учитывается.</p></div><button class="button secondary" data-navigate="settings">Настроить синхронизацию <svg><use href="#i-arrow"/></svg></button></section>
+    <section id="view-settings" class="view" hidden><p class="eyebrow">ПОД ТВОИМ КОНТРОЛЕМ</p><h1>Настройки</h1><p class="page-copy">Управляй привязкой<br>и обновлением своего ника.</p><div class="card settings-card"><div class="setting-row"><span class="setting-icon"><svg><use href="#i-sync"/></svg></span><div><label for="sync-toggle">Синхронизация ника</label><p>Автоматически раз в час</p></div><input id="sync-toggle" type="checkbox" role="switch" aria-label="Синхронизация ника"></div><p class="setting-explanation">Если выключить, бот перестанет менять твой тег — даже при ручном запуске администратором. Текущий тег останется.</p></div><div class="card account-settings"><span class="small-label">ПРИВЯЗАННЫЙ АККАУНТ</span><strong id="settings-name">—</strong><span id="settings-tag">—</span><div class="divider"></div><p>Хочешь подключить другой аккаунт? Сначала отвяжи текущий, затем укажи новый тег.</p><button id="unlink" class="button danger"><svg><use href="#i-link"/></svg> Отвязать аккаунт</button></div><p class="ownership-note">Для привязки используется свободный тег из состава подключённого клана. Пароли и игровой токен не нужны.</p></section>
+   </div>
+  </div>
+  <div id="notice" class="notice" role="status" hidden></div>
+ </main>
+ <nav id="navigation" class="bottom-nav" aria-label="Основная навигация" hidden><button data-tab="profile" class="active" aria-current="page"><svg><use href="#i-user"/></svg><span>Профиль</span></button><button data-tab="sync"><svg><use href="#i-sync"/></svg><span>Синхронизация</span></button><button data-tab="settings"><svg><use href="#i-settings"/></svg><span>Настройки</span></button></nav>
+</div>
+<dialog id="unlink-dialog"><div class="dialog-icon"><svg><use href="#i-link"/></svg></div><h2>Отвязать аккаунт?</h2><p>Синхронизация остановится, и тег освободится для новой привязки. Уже установленный тег в группе останется до изменения администратором.</p><button id="confirm-unlink" class="button danger">Да, отвязать</button><button id="cancel-unlink" class="button secondary">Оставить аккаунт</button></dialog>
+</body>
+</html>

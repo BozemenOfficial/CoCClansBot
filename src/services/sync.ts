@@ -2,7 +2,6 @@ import type { ClashApi } from '../clients/clash';
 import type { RequestBudget } from '../clients/http';
 import { Store, type Group, type Link } from '../db/store';
 import { ServiceError } from '../errors';
-import type { ModerationService } from './moderation';
 import { memberTag } from '../validation/player';
 
 export interface Member {
@@ -29,7 +28,6 @@ export class SyncService {
     private readonly botId: number,
     private readonly budget: RequestBudget,
     private readonly batchSize: number,
-    private readonly moderation?: ModerationService,
   ) {}
 
   async run(options: { user?: number; chat?: number } = {}): Promise<SyncResult> {
@@ -37,17 +35,18 @@ export class SyncService {
     const owner = crypto.randomUUID();
     if (!await this.store.lease('sync', owner)) return { ...result, busy: true };
     try {
-      this.moderation?.beginPass();
       const groups = options.chat === undefined ? await this.store.groups() : [await this.store.group(options.chat)].filter((g): g is Group => g !== null);
       if (!groups.length) return result;
-      const links = options.chat !== undefined
+      const links = options.user !== undefined
+        ? await this.store.due(this.batchSize + 1, options.user)
+        : options.chat !== undefined
         ? await this.store.manualBatch(options.chat, this.batchSize + 1)
         : await this.store.due(this.batchSize + 1, options.user);
       const permissions = new Map<number, Member>();
       for (const link of links.slice(0, this.batchSize)) {
         if (this.budget.available < 5) { result.partial = true; break; }
         const complete = await this.syncPlayer(link, groups, permissions, options, result);
-        if (options.chat !== undefined && complete) await this.store.manualCursor(options.chat, link.player_tag);
+        if (options.chat !== undefined && options.user === undefined && complete) await this.store.manualCursor(options.chat, link.player_tag);
         if (!complete) { result.partial = true; break; }
       }
       if (links.length > this.batchSize) result.partial = true;
@@ -71,6 +70,11 @@ export class SyncService {
         }
         const group = groups[i]!;
         try {
+          if (player.clan?.tag !== group.clan_tag) {
+            await this.store.saveState(group.chat_id, link.telegram_id, null, 'not_in_clan');
+            result.skipped++;
+            continue;
+          }
           if (!permissions.has(group.chat_id)) {
             const bot = await this.telegram.getChatMember(group.chat_id, this.botId);
             permissions.set(group.chat_id, bot);
@@ -92,9 +96,8 @@ export class SyncService {
             result.skipped++;
             continue;
           }
-          const moderation = await this.moderation?.check(group, link, player, member, rights);
           if (!rights.can_manage_tags) {
-            await this.store.saveState(group.chat_id, link.telegram_id, null, moderation ?? 'missing_rights');
+            await this.store.saveState(group.chat_id, link.telegram_id, null, 'missing_rights');
             result.skipped++;
             continue;
           }
@@ -104,7 +107,7 @@ export class SyncService {
             await this.telegram.setChatMemberTag(group.chat_id, link.telegram_id, tag);
             result.updated++;
           }
-          await this.store.saveState(group.chat_id, link.telegram_id, tag, moderation ?? 'ok');
+          await this.store.saveState(group.chat_id, link.telegram_id, tag, 'ok');
         } catch (error) {
           if (error instanceof ServiceError && error.code === 'budget_exhausted') {
             if (options.chat === undefined) await this.store.groupCursor(player.tag, i);
@@ -124,7 +127,7 @@ export class SyncService {
       }
       if (options.chat === undefined) {
         await this.store.groupCursor(player.tag, 0);
-        await this.store.postpone(player.tag, 1800);
+        await this.store.postpone(player.tag, 3600);
       }
       return true;
     } catch (error) {

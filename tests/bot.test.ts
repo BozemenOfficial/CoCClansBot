@@ -46,18 +46,14 @@ async function bot() {
   return bot;
 }
 
-it('completes the private chat binding flow through real grammY handlers', async () => {
+it('opens the Mini App instead of starting a private token or tag conversation', async () => {
   const app = await bot();
+  await app.handleUpdate(message('/start'));
   await app.handleUpdate(message('/link'));
-  await db.store.user(10);
-  await db.store.setup(-100, 'Group', 10, { ...player.clan!, members: 1, memberList: [{ tag: player.tag }] });
   await app.handleUpdate(message('#P0Y'));
-  expect((await db.store.link(10))?.player_tag).toBe('#P0Y');
-  expect(calls.some((c) => c.method === 'deleteMessage')).toBe(false);
-  expect((await db.store.link(10))?.registration_kind).toBe('clan_roster');
-  expect(calls.filter((c) => c.method === 'sendMessage').some((c) => String(c.body.text).includes('ABC12345'))).toBe(false);
-  await app.handleUpdate(message('/profile'));
-  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('Ратуша: 16'))).toBe(true);
+  expect(await db.store.link(10)).toBeNull();
+  expect(await db.store.conversation(10)).toBeNull();
+  expect(calls.some((c) => c.method === 'sendMessage' && JSON.stringify(c.body.reply_markup).includes('web_app'))).toBe(true);
 });
 it('refuses non-admin and anonymous setup commands', async () => {
   const app = await bot();
@@ -96,18 +92,25 @@ it('keeps the menu available and does not request player tokens when the game in
   await app.handleUpdate(message('/start'));
   await app.handleUpdate(message('/link'));
   expect(await db.store.conversation(10)).toBeNull();
-  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('подключение к Clash of Clans ещё не настроено'))).toBe(true);
+  expect(calls.some((c) => c.method === 'sendMessage' && JSON.stringify(c.body.reply_markup).includes('web_app'))).toBe(true);
 });
 
-it('denies review callbacks from ordinary members and lists reviews only to admins', async () => {
+it('does not let ordinary group members force a full synchronization', async () => {
   const app = await bot();
-  await app.handleUpdate({ update_id: 20, callback_query: {
-    id: 'review', from: { id: 10, is_bot: false, first_name: 'User' }, chat_instance: 'group',
-    data: 'mod:allow:1', message: { message_id: 1, date: 1, chat: { id: -100, type: 'supergroup', title: 'Group' } },
-  } });
-  expect(calls.some((c) => c.method === 'answerCallbackQuery' && c.body.show_alert === true)).toBe(true);
-  expect(calls.some((c) => c.method === 'restrictChatMember')).toBe(false);
+  await db.store.user(10);
+  await db.store.setup(-100, 'Group', 10, { ...player.clan!, members: 1, memberList: [{ tag: player.tag }] });
+  await app.handleUpdate(message('/sync', true));
+  expect(await db.store.syncJob(-100)).toBeNull();
+  expect(calls.some((c) => c.method === 'setChatMemberTag')).toBe(false);
+  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('только администраторам'))).toBe(true);
+});
+it('queues all registered users when an administrator forces group sync', async () => {
+  const app = await bot();
+  await db.store.user(10);
+  await db.store.bind(10, player);
+  await db.store.setup(-100, 'Group', 10, { ...player.clan!, members: 1, memberList: [{ tag: player.tag }] });
   admin = true;
-  await app.handleUpdate(message('/reviews', true));
-  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('Нет участников'))).toBe(true);
+  await app.handleUpdate(message('/sync', true));
+  expect((await db.store.syncJob(-100))?.state).toBe('done');
+  expect(calls.some((c) => c.method === 'restrictChatMember')).toBe(false);
 });

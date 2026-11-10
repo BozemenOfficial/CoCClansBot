@@ -48,18 +48,18 @@ describe('tag synchronization', () => {
     expect((await db.store.state(-100, 10))?.outcome).toBe('missing_rights');
     expect(telegram.setChatMemberTag).not.toHaveBeenCalled();
   });
-  it('updates a former clan member without removing them', async () => {
+  it('skips former clan members without restricting or removing them', async () => {
     const { clan: _clan, ...withoutClan } = player;
     void _clan;
     clash.player.mockResolvedValue(withoutClan);
-    expect((await make().run()).updated).toBe(1);
-    expect((await db.store.state(-100, 10))?.outcome).toBe('ok');
+    expect((await make().run()).updated).toBe(0);
+    expect((await db.store.state(-100, 10))?.outcome).toBe('not_in_clan');
   });
   it('keeps each group configuration and state separate', async () => {
     await db.store.setup(-200, 'Other group', 10, { tag: '#Q2Y', name: 'Other' });
     await make().run({ chat: -200 });
     expect(await db.store.state(-100, 10)).toBeNull();
-    expect((await db.store.state(-200, 10))?.outcome).toBe('ok');
+    expect((await db.store.state(-200, 10))?.outcome).toBe('not_in_clan');
     expect((await db.store.group(-100))?.clan_tag).toBe('#Q0Y');
   });
   it('does not overlap a cron and a manual sync', async () => {
@@ -111,6 +111,21 @@ it('continues a partially checked player from the next group', async () => {
     expect((await store.due(8))[0]?.next_group).toBe(2);
     expect((await run()).partial).toBe(false);
     expect(calls).toEqual([-300, -200, -100]);
+    expect(await store.due(8)).toEqual([]);
+  } finally { sqlite.close(); }
+});
+
+it('does not schedule a successfully synchronized account again before one hour', async () => {
+  const { store, sqlite } = testStore();
+  try {
+    await store.user(10); await store.bind(10, player); await store.setup(-100, 'Group', 10, player.clan!);
+    const sync = new SyncService(store, { player: async () => player, clan: vi.fn(), verify: vi.fn() }, {
+      getChatMember: async (_chat, id) => id === 999 ? { status: 'administrator', can_manage_tags: true } : { status: 'member', tag: 'Archer' },
+      setChatMemberTag: vi.fn(),
+    }, 999, new RequestBudget(), 8);
+    await sync.run();
+    const row = sqlite.prepare('SELECT next_sync_at-unixepoch() AS delay FROM players').get();
+    expect(row?.delay).toBe(3600);
     expect(await store.due(8)).toEqual([]);
   } finally { sqlite.close(); }
 });

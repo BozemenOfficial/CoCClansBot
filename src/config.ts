@@ -9,6 +9,8 @@ export interface Env {
   COC_API_BASE_URL?: string;
   COC_TRANSPORT?: string;
   SYNC_BATCH_SIZE?: string;
+  MINI_APP_URL?: string;
+  ASSETS?: { fetch(request: Request): Promise<Response> };
 }
 
 const schema = z.object({
@@ -18,6 +20,7 @@ const schema = z.object({
   COC_API_BASE_URL: z.url().default('https://api.clashofclans.com/v1'),
   COC_API_TOKEN: z.string().min(1).optional(),
   COC_GATEWAY_TOKEN: z.string().min(1).optional(),
+  MINI_APP_URL: z.url().refine((value) => new URL(value).protocol === 'https:').default('https://coc-clans-bot.loopnexo.workers.dev/app/'),
   SYNC_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(8),
 }).superRefine((v, ctx) => {
   const url = new URL(v.COC_API_BASE_URL);

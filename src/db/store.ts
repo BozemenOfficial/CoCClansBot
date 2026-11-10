@@ -1,10 +1,10 @@
 import type { Clan, Player } from '../clients/clash';
 
-export interface Link { telegram_id: number; player_tag: string; next_group?: number; registration_kind?: 'token' | 'clan_roster' }
+export interface Link { telegram_id: number; player_tag: string; next_group?: number; registration_kind?: 'token' | 'clan_roster'; sync_enabled?: number }
 export interface Group { chat_id: number; clan_tag: string; clan_name: string; moderation_enabled: number; roster_count: number }
 export interface Conversation { step: 'tag' | 'token'; player_tag: string | null; attempts: number }
 export interface SyncState { applied_tag: string | null; outcome: string }
-export interface ModerationCase { id: number; chat_id: number; telegram_id: number; player_tag: string; clan_tag: string; state: 'observing' | 'restricting' | 'pending' | 'held' | 'allowed'; first_absent_at: number; muted_until: number; applied: number; notified: number; permissions: string | null }
+export interface SyncJob { chat_id: number; state: 'pending' | 'done'; checked: number; updated: number; skipped: number; failed: number; notified: number }
 export type Claim = 'claimed' | 'done' | 'busy';
 
 export class Store {
@@ -33,17 +33,6 @@ export class Store {
   async conversation(id: number): Promise<Conversation | null> {
     return this.query('SELECT * FROM conversations WHERE telegram_id=? AND expires_at > unixepoch()', id).first<Conversation>();
   }
-  async setConversation(id: number, step: 'tag' | 'token', tag: string | null = null): Promise<void> {
-    await this.query(`INSERT INTO conversations(telegram_id,step,player_tag,expires_at,attempts)
-      VALUES (?,?,?,unixepoch()+600,0) ON CONFLICT(telegram_id) DO UPDATE SET
-      step=excluded.step,player_tag=excluded.player_tag,expires_at=excluded.expires_at,attempts=0`, id, step, tag).run();
-  }
-  async failedToken(id: number): Promise<void> {
-    await this.query('UPDATE conversations SET attempts=attempts+1 WHERE telegram_id=?', id).run();
-  }
-  async clearConversation(id: number): Promise<void> {
-    await this.query('DELETE FROM conversations WHERE telegram_id=?', id).run();
-  }
   async limited(bucket: string, max: number, seconds: number): Promise<boolean> {
     const row = await this.query(`INSERT INTO rate_limits(bucket,window_start,count) VALUES (?,unixepoch(),1)
       ON CONFLICT(bucket) DO UPDATE SET
@@ -52,13 +41,13 @@ export class Store {
       RETURNING count`, bucket, seconds, seconds).first<{ count: number }>();
     return !row || row.count > max;
   }
-  async setup(chatId: number, title: string, by: number, clan: Clan, moderation = false): Promise<void> {
+  async setup(chatId: number, title: string, by: number, clan: Clan): Promise<void> {
     await this.db.batch([
       this.query(`INSERT INTO telegram_groups(chat_id,title,configured_by,updated_at) VALUES (?,?,?,unixepoch())
         ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title,configured_by=excluded.configured_by,updated_at=excluded.updated_at`, chatId, title, by),
       this.query(`INSERT INTO clan_configs(chat_id,clan_tag,clan_name,moderation_enabled,roster_count) VALUES (?,?,?,?,?)
         ON CONFLICT(chat_id) DO UPDATE SET clan_tag=excluded.clan_tag,clan_name=excluded.clan_name,
-        moderation_enabled=excluded.moderation_enabled,roster_count=excluded.roster_count`, chatId, clan.tag, clan.name, moderation ? 1 : 0, clan.members ?? 0),
+        moderation_enabled=excluded.moderation_enabled,roster_count=excluded.roster_count`, chatId, clan.tag, clan.name, 0, clan.members ?? 0),
       this.query('DELETE FROM sync_state WHERE chat_id=?', chatId),
       this.query('UPDATE players SET next_sync_at=0,next_group=0'),
       this.query('DELETE FROM manual_sync_cursors WHERE chat_id=?', chatId),
@@ -81,16 +70,16 @@ export class Store {
   async due(limit: number, user?: number): Promise<Link[]> {
     return (await (user === undefined
       ? this.query(`SELECT l.telegram_id,l.player_tag,p.next_group FROM account_links l JOIN players p USING(player_tag)
-        WHERE p.next_sync_at <= unixepoch() ORDER BY p.next_sync_at,p.player_tag LIMIT ?`, limit)
-      : this.query('SELECT telegram_id,player_tag FROM account_links WHERE telegram_id=?', user)).all<Link>()).results;
+        WHERE l.sync_enabled=1 AND p.next_sync_at <= unixepoch() ORDER BY p.next_sync_at,p.player_tag LIMIT ?`, limit)
+      : this.query('SELECT telegram_id,player_tag FROM account_links WHERE telegram_id=? AND sync_enabled=1', user)).all<Link>()).results;
   }
   async manualBatch(chat: number, limit: number): Promise<Link[]> {
     const rows = (await this.query(`SELECT telegram_id,player_tag FROM account_links
-      WHERE player_tag > coalesce((SELECT player_tag FROM manual_sync_cursors WHERE chat_id=?),'')
+      WHERE sync_enabled=1 AND player_tag > coalesce((SELECT player_tag FROM manual_sync_cursors WHERE chat_id=?),'')
       ORDER BY player_tag LIMIT ?`, chat, limit).all<Link>()).results;
     if (rows.length) return rows;
     await this.manualCursor(chat, '');
-    return (await this.query('SELECT telegram_id,player_tag FROM account_links ORDER BY player_tag LIMIT ?', limit).all<Link>()).results;
+    return (await this.query('SELECT telegram_id,player_tag FROM account_links WHERE sync_enabled=1 ORDER BY player_tag LIMIT ?', limit).all<Link>()).results;
   }
   async manualCursor(chat: number, tag: string): Promise<void> {
     await this.query(`INSERT INTO manual_sync_cursors(chat_id,player_tag) VALUES (?,?)
@@ -133,37 +122,46 @@ export class Store {
     return (await this.query(`SELECT count(*) AS total,coalesce(sum(outcome='ok'),0) AS ok,max(checked_at) AS checked_at
       FROM sync_state WHERE chat_id=?`, chat).first<{ total: number; ok: number; checked_at: number | null }>())!;
   }
-  async caseFor(chat: number, user: number): Promise<ModerationCase | null> {
-    return this.query('SELECT * FROM moderation_cases WHERE chat_id=? AND telegram_id=?', chat, user).first<ModerationCase>();
+  async queueSync(chat: number, by: number): Promise<void> {
+    await this.db.batch([
+      this.query(`INSERT INTO sync_jobs(chat_id,requested_by) VALUES (?,?) ON CONFLICT(chat_id) DO UPDATE SET
+        requested_by=excluded.requested_by,state='pending',checked=0,updated=0,skipped=0,failed=0,notified=0,created_at=unixepoch()`, chat, by),
+      this.query('DELETE FROM manual_sync_cursors WHERE chat_id=?', chat),
+    ]);
   }
-  async review(id: number): Promise<ModerationCase | null> {
-    return this.query('SELECT * FROM moderation_cases WHERE id=?', id).first<ModerationCase>();
+  async syncJob(chat: number): Promise<SyncJob | null> {
+    return this.query('SELECT * FROM sync_jobs WHERE chat_id=?', chat).first<SyncJob>();
   }
-  async observe(chat: number, user: number, tag: string, clan: string): Promise<ModerationCase> {
-    await this.query(`INSERT INTO moderation_cases(chat_id,telegram_id,player_tag,clan_tag,state)
-      VALUES (?,?,?,?,'observing') ON CONFLICT(chat_id,telegram_id) DO NOTHING`, chat, user, tag, clan).run();
-    return (await this.caseFor(chat, user))!;
+  async nextSyncJob(): Promise<SyncJob | null> {
+    return this.query("SELECT * FROM sync_jobs WHERE state='pending' OR notified=0 ORDER BY CASE state WHEN 'pending' THEN 0 ELSE 1 END,created_at,chat_id LIMIT 1").first<SyncJob>();
   }
-  async clearObservation(chat: number, user: number): Promise<void> {
-    await this.query("DELETE FROM moderation_cases WHERE chat_id=? AND telegram_id=? AND state='observing'", chat, user).run();
+  async progressSyncJob(chat: number, result: { checked: number; updated: number; skipped: number; failed: number; partial: boolean }): Promise<void> {
+    await this.query(`UPDATE sync_jobs SET checked=checked+?,updated=updated+?,skipped=skipped+?,failed=failed+?,state=? WHERE chat_id=?`,
+      result.checked,result.updated,result.skipped,result.failed,result.partial ? 'pending' : 'done',chat).run();
   }
-  async markCase(id: number, state: string, until: number, applied: boolean, by: number | null = null): Promise<void> {
-    await this.query(`UPDATE moderation_cases SET state=?,muted_until=?,applied=?,decided_by=?,updated_at=unixepoch() WHERE id=?`, state, until, applied ? 1 : 0, by, id).run();
+  async notifiedSyncJob(chat: number): Promise<void> {
+    await this.query('UPDATE sync_jobs SET notified=1 WHERE chat_id=?', chat).run();
   }
-  async expectedPermissions(id: number, permissions: string): Promise<void> {
-    await this.query('UPDATE moderation_cases SET permissions=? WHERE id=?', permissions, id).run();
+  async cachedPlayer(id: number): Promise<{ tag: string; name: string; clan_tag: string | null; clan_name: string | null; updated_at: number } | null> {
+    return this.query(`SELECT p.player_tag AS tag,p.name,p.clan_tag,p.clan_name,p.updated_at
+      FROM players p JOIN account_links l USING(player_tag) WHERE l.telegram_id=?`, id).first();
   }
-  async resetCase(chat: number, user: number): Promise<void> {
-    await this.query("DELETE FROM moderation_cases WHERE chat_id=? AND telegram_id=? AND state IN ('observing','allowed')", chat, user).run();
+  async syncStates(id: number): Promise<{ clan_name: string; applied_tag: string | null; outcome: string; checked_at: number }[]> {
+    return (await this.query(`SELECT c.clan_name,s.applied_tag,s.outcome,s.checked_at FROM sync_state s
+      JOIN clan_configs c USING(chat_id) WHERE s.telegram_id=? AND s.outcome NOT IN ('not_member','not_in_clan')
+      ORDER BY s.checked_at DESC`, id).all<{ clan_name: string; applied_tag: string | null; outcome: string; checked_at: number }>()).results;
   }
-  async notified(id: number): Promise<void> {
-    await this.query('UPDATE moderation_cases SET notified=1 WHERE id=?', id).run();
+  async syncEnabled(id: number, enabled: boolean): Promise<void> {
+    // Enabling must not reset next_sync_at: members cannot use the switch to force an update.
+    await this.query('UPDATE account_links SET sync_enabled=? WHERE telegram_id=?', enabled ? 1 : 0, id).run();
   }
-  async pending(chat: number): Promise<ModerationCase[]> {
-    return (await this.query("SELECT * FROM moderation_cases WHERE chat_id=? AND state IN ('pending','restricting') ORDER BY id LIMIT 10", chat).all<ModerationCase>()).results;
-  }
-  async rosterCount(chat: number, count: number): Promise<void> {
-    await this.query('UPDATE clan_configs SET roster_count=? WHERE chat_id=?', count, chat).run();
+  async unlink(id: number): Promise<void> {
+    await this.db.batch([
+      this.query('DELETE FROM sync_state WHERE telegram_id=?', id),
+      this.query('DELETE FROM moderation_cases WHERE telegram_id=?', id),
+      this.query('DELETE FROM conversations WHERE telegram_id=?', id),
+      this.query('DELETE FROM account_links WHERE telegram_id=?', id),
+    ]);
   }
   async cleanup(): Promise<void> {
     await this.db.batch([

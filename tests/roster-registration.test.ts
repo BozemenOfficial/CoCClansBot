@@ -10,7 +10,7 @@ describe('registration from configured clan roster', () => {
   const api = { player: vi.fn(async () => player), clan: vi.fn(async () => clan), verify: vi.fn() };
   beforeEach(async () => {
     db = testStore(); vi.clearAllMocks(); api.player.mockResolvedValue(player); api.clan.mockResolvedValue(clan);
-    await db.store.user(10); await db.store.setup(-100, 'Group', 10, clan, true);
+    await db.store.user(10); await db.store.setup(-100, 'Group', 10, clan);
   });
   afterEach(() => db.sqlite.close());
   it('registers a free roster tag without verifying or requesting a player token', async () => {
