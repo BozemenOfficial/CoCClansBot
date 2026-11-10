@@ -23,6 +23,11 @@ export function boundedFetch(budget: RequestBudget, upstream: Fetcher = fetch): 
       ? AbortSignal.any([init.signal, AbortSignal.timeout(5000)])
       : AbortSignal.timeout(5000);
     // Never forward auth headers to a redirect destination.
-    return upstream(input, { ...init, signal, redirect: 'error' });
+    const response = await upstream(input, { ...init, signal, redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new ServiceError('redirect_blocked');
+    }
+    return response;
   };
 }

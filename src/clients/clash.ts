@@ -31,7 +31,7 @@ export class ClashClient implements ClashApi {
     let response: Response;
     try {
       response = await this.request(`${this.config.COC_API_BASE_URL.replace(/\/$/, '')}${path}`, {
-        method: body ? 'POST' : 'GET', redirect: 'error',
+        method: body ? 'POST' : 'GET', redirect: 'manual',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });

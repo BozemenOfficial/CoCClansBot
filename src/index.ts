@@ -16,14 +16,17 @@ export default {
     if (!update) return new Response('Invalid update', { status: 400 });
     const store = new Store(env.DB);
     const owner = crypto.randomUUID();
+    let stage = 'configuration';
     let claimed = false;
     let userLease: string | null = null;
     try {
       const config = readConfig(env);
+      stage = 'claim_update';
       const claim = await store.claim(update.update_id, owner);
       if (claim === 'done') return new Response('OK');
       if (claim === 'busy') return new Response('Retry later', { status: 503 });
       claimed = true;
+      stage = 'user_lock';
       const id = actor(update);
       if (id !== null) {
         const name = `user:${id}`;
@@ -34,16 +37,20 @@ export default {
         }
         userLease = name;
       }
+      stage = 'create_bot';
       const { bot } = createBot(config, store, new RequestBudget());
+      stage = 'telegram_get_me';
       bot.botInfo = await bot.api.getMe();
+      stage = 'handle_update';
       await bot.handleUpdate(update as Update);
+      stage = 'finish_update';
       await store.finish(update.update_id, owner);
       return new Response('OK');
     } catch {
       // Telegram errors can contain the whole update or token-bearing request payload.
-      console.error('webhook_failed');
+      console.error('webhook_failed', stage);
       if (claimed) await store.abandon(update.update_id, owner);
-      return new Response('Retry later', { status: 503 });
+      return new Response('Retry later', { status: 503, headers: { 'X-Bot-Error-Stage': stage } });
     } finally {
       if (userLease) await store.release(userLease, owner);
     }
