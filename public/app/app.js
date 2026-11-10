@@ -66,6 +66,7 @@ function render(data) {
   $('navigation').hidden = !data.linked;
   if (!data.linked) { $('player-tag').value = ''; return; }
   const player = data.player;
+  text('profile-updated', (data.stale ? 'Сохранённые данные · ' : 'Данные игры · ') + (data.updatedAt ? new Date(data.updatedAt*1000).toLocaleString('ru-RU') : 'время неизвестно'));
   text('player-name', player?.name || 'Игровой аккаунт');
   text('player-id', player?.tag || '—');
   text('clan-name', player?.clan?.name || 'Без клана');
@@ -126,7 +127,7 @@ $('link-form').addEventListener('submit', (event) => {
   event.preventDefault();
   void action(async () => { const data = await api('link', { tag: $('player-tag').value.trim() }); currentTab = 'profile'; render(data); syncFeedback(data.result); tg?.HapticFeedback?.notificationOccurred('success'); });
 });
-$('refresh-profile').addEventListener('click', () => { void action(async () => { render(await api('me')); notice('Данные профиля обновлены. Тег в группе проверяется раз в час.'); }); });
+$('refresh-profile').addEventListener('click', () => { void action(async () => { const data = await api('me'); render(data); if (!data.stale) notice('Данные профиля обновлены. Тег в группе проверяется раз в час.'); }); });
 $('sync-toggle').addEventListener('change', () => {
   const enabled = $('sync-toggle').checked;
   void action(async () => { render(await api('settings', { syncEnabled: enabled })); notice(enabled ? 'Синхронизация включена. Бот обновит тег при следующей проверке.' : 'Синхронизация выключена. Текущий тег останется.'); });

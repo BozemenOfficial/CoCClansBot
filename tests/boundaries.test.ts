@@ -43,3 +43,10 @@ it('clan change cancels its queue without deleting other group state',async()=>{
  expect(await store.syncJob(-100)).toBeNull();expect(await store.syncJob(-200)).not.toBeNull();
  }finally{sqlite.close();}
 });
+it('keeps the last bot-owned tag after a failed synchronization for safe cleanup',async()=>{
+ const {store,sqlite}=testStore();try{
+ await store.user(1);await store.bind(1,player);await store.setup(-100,'Group',1,player.clan!);
+ await store.saveState(-100,1,'Archer','ok');await store.saveState(-100,1,null,'telegram_error');
+ expect((await store.state(-100,1))?.applied_tag).toBe('Archer');
+ }finally{sqlite.close();}
+});

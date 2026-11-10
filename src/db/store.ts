@@ -68,7 +68,7 @@ export class Store {
   }
   async saveState(chat: number, user: number, tag: string | null, outcome: string): Promise<void> {
     await this.query(`INSERT INTO sync_state(chat_id,telegram_id,applied_tag,outcome,checked_at) VALUES (?,?,?,?,unixepoch())
-      ON CONFLICT(chat_id,telegram_id) DO UPDATE SET applied_tag=excluded.applied_tag,
+      ON CONFLICT(chat_id,telegram_id) DO UPDATE SET applied_tag=CASE WHEN excluded.outcome='ok' THEN excluded.applied_tag ELSE sync_state.applied_tag END,
       outcome=excluded.outcome,checked_at=excluded.checked_at`, chat, user, tag, outcome).run();
   }
   async due(limit: number, user?: number): Promise<Link[]> {
