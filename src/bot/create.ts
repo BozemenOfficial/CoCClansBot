@@ -13,7 +13,7 @@ export function createBot(config: Config, store: Store, budget: RequestBudget) {
   const bot = new Bot(config.BOT_TOKEN, { client: { fetch: request, timeoutSeconds: 6 } });
   const clash = new ClashClient(config, request,store);
   const botId = Number(config.BOT_TOKEN.split(':')[0]);
-  const sync = new SyncService(store, clash, bot.api, botId, budget, config.SYNC_BATCH_SIZE);
+  const sync = new SyncService(store, clash, bot.api, botId, budget, Math.min(config.SYNC_BATCH_SIZE,3));
   bot.use(async (ctx, next) => {
     if (ctx.from && await store.limited(`messages:${ctx.from.id}`, 30, 60)) return;
     await next();

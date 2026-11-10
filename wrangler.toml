@@ -15,7 +15,7 @@ crons = ["* * * * *"] # Drain batches each minute; each account is due once per 
 [vars]
 COC_API_BASE_URL = "https://cocproxy.royaleapi.dev/v1"
 COC_TRANSPORT = "royaleapi"
-SYNC_BATCH_SIZE = "8"
+SYNC_BATCH_SIZE = "3"
 MINI_APP_URL = "https://coc-clans-bot.loopnexo.workers.dev/app/"
 
 [[d1_databases]]

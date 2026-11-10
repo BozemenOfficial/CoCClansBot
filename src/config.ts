@@ -23,7 +23,7 @@ const schema = z.object({
   COC_API_TOKEN: z.string().min(1).optional(),
   COC_GATEWAY_TOKEN: z.string().min(1).optional(),
   MINI_APP_URL: z.url().refine((value) => new URL(value).protocol === 'https:').default('https://coc-clans-bot.loopnexo.workers.dev/app/'),
-  SYNC_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(8),
+  SYNC_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(3),
 }).superRefine((v, ctx) => {
   const url = new URL(v.COC_API_BASE_URL);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
