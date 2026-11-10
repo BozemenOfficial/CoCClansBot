@@ -2,7 +2,7 @@ import type { Bot, Context } from 'grammy/web';
 import type { ClashApi } from '../clients/clash';
 import type { Store } from '../db/store';
 import type { SyncService } from '../services/sync';
-import { LinkingService, type LinkResult } from '../services/linking';
+import { LinkingService } from '../services/linking';
 import { playerTagSchema } from '../validation/player';
 import { menu, profileText } from './menu';
 import { userError } from '../errors';
@@ -35,15 +35,15 @@ export function playerHandlers(bot: Bot, store: Store, clash: ClashApi, sync: Sy
         const result = await sync.run({ user: ctx.from.id });
         await ctx.reply(result.busy ? 'Синхронизация уже идёт. Профиль загружу отдельно.' : `Проверка тегов: обновлено ${result.updated}, ошибок ${result.failed}.${result.partial ? ' Продолжение — при следующей проверке.' : ''}`);
       }
-      await ctx.reply(profileText(await clash.player(link.player_tag)), { reply_markup: menu() });
+      await ctx.reply(profileText(await clash.player(link.player_tag)) + (link.registration_kind === 'clan_roster' ? '\n\nРегистрация по составу клана; владение аккаунтом не подтверждено.' : ''), { reply_markup: menu() });
     } catch (error) { await ctx.reply(userError(error)); }
   };
 
   bot.command('start', async (ctx) => {
     if (!await privateOnly(ctx)) return;
-    await ctx.reply('Привет! Я связываю игровой аккаунт с Telegram и ставлю игровой ник в тег участника группы.' + (clash.available === false ? '\n\nПодключение к игре пока не настроено. Меню уже доступно, а привязка и игровые данные заработают после подключения.' : '\nНачни с привязки аккаунта.'), { reply_markup: menu() });
+    await ctx.reply('Привет! Я связываю игровой аккаунт с Telegram и ставлю игровой ник в тег участника группы.' + (clash.available === false ? '\n\nПодключение к игре пока не настроено. Меню уже доступно, а привязка и игровые данные заработают после подключения.' : '\nРегистрация без игрового токена: пришли свободный Player Tag из подключённого клана. Начни с кнопки «Привязать аккаунт».'), { reply_markup: menu() });
   });
-  bot.command('help', (ctx) => ctx.reply('В личном чате: /start, /link, /profile, /cancel.\nВ группе для администраторов: /setup #ТЕГ_КЛАНА, /status, /sync.\nБот не удаляет участников из группы.'));
+  bot.command('help', (ctx) => ctx.reply('В личном чате: /start, /link, /profile, /cancel.\nВ группе для администраторов: /setup #ТЕГ_КЛАНА, /status, /sync.\n/reviews — очередь решений администратора. При подтверждённом выходе из клана бот временно ограничивает отправку сообщений. Никого не удаляет.'));
   bot.command('link', startLink);
   bot.command('profile', (ctx) => showProfile(ctx));
   bot.command('cancel', async (ctx) => {
@@ -58,7 +58,7 @@ export function playerHandlers(bot: Bot, store: Store, clash: ClashApi, sync: Sy
       if (action === 'link') await startLink(ctx);
       if (action === 'profile') await showProfile(ctx);
       if (action === 'refresh') await showProfile(ctx, true);
-      if (action === 'settings') await ctx.reply('Один Telegram-аккаунт — один игровой аккаунт.\nСамостоятельная перепривязка пока отключена, чтобы чужой аккаунт нельзя было перехватить.\nПрервать текущую привязку: /cancel.');
+      if (action === 'settings') await ctx.reply('Регистрация по свободному Player Tag из подключённого клана, без игрового токена. Владение аккаунтом не подтверждается.\nОдин тег — один Telegram-аккаунт. Спорную регистрацию решает администратор.\nОтменить регистрацию: /cancel.');
     });
   }
   bot.on('message:text', async (ctx) => {
@@ -66,35 +66,28 @@ export function playerHandlers(bot: Bot, store: Store, clash: ClashApi, sync: Sy
     const id = ctx.from.id;
     const state = await store.conversation(id);
     if (!state) { await ctx.reply('Выбери действие в меню. Для новой привязки нажми «Привязать аккаунт».', { reply_markup: menu() }); return; }
-    if (state.step === 'tag') {
-      const tag = playerTagSchema.safeParse(ctx.message.text);
-      if (!tag.success) { await ctx.reply('Не похоже на тег игрока. Скопируй его из профиля в игре, вместе с #.'); return; }
-      try {
-        const p = await linking.select(id, tag.data);
-        if (!p) { await ctx.reply('Этот игровой аккаунт уже привязан. Автоматическая перепривязка недоступна.'); return; }
-        await ctx.reply(`Найден игрок: ${p.name}\nКлан: ${p.clan?.name ?? 'нет клана'}\n\nТеперь пришли API Token из настроек игры: «Дополнительные настройки» → «API Token». Это не код входа и не пароль Supercell ID.\nПроверю его и постараюсь удалить сообщение. Токен в базе не сохраняется. На проверку есть 10 минут.`);
-      } catch (error) { await ctx.reply(userError(error)); }
+    if (state.step === 'token') {
+      try { await ctx.deleteMessage(); } catch { /* Legacy token conversation: do not echo its input. */ }
+      await store.setConversation(id, 'tag');
+      await ctx.reply('Теперь регистрация без игрового токена. Пришли заново Player Tag, начинающийся с #.');
       return;
     }
-    // Remove the player's token before any API call. A failed deletion must not leak it into logs.
-    try { await ctx.deleteMessage(); } catch { /* Telegram may deny deletion; never echo the token. */ }
-    const replies: Record<LinkResult, string> = {
-      linked: 'Аккаунт привязан. Проверю твой тег в подключённых группах.',
-      invalid: 'Токен не подошёл. Скопируй API Token из игры и попробуй ещё раз.',
-      taken: 'Этот аккаунт уже привязан другому пользователю.',
-      already_linked: 'У тебя уже есть привязанный аккаунт.',
-      expired: 'Время проверки истекло. Начни привязку заново.',
-      limited: 'Лимит попыток исчерпан. Подожди 10 минут и начни привязку заново.',
-    };
+    const tag = playerTagSchema.safeParse(ctx.message.text);
+    if (!tag.success) { await ctx.reply('Не похоже на тег игрока. Скопируй его из профиля в игре вместе с #.'); return; }
     try {
-      const result = await linking.verify(id, ctx.message.text.trim());
-      await ctx.reply(replies[result], { reply_markup: menu() });
-      if (result === 'linked') {
-        try {
-          const checked = await sync.run({ user: id });
-          if (checked.busy || checked.partial || checked.failed) await ctx.reply('Привязка сохранена. Проверка тегов продолжится автоматически.');
-        } catch { await ctx.reply('Привязка сохранена. Теги проверю при следующей синхронизации.'); }
-      }
+      const result = await linking.registerFromClan(id, tag.data);
+      const replies = {
+        taken: 'Этот тег уже занят другим пользователем. Обратись к администратору.',
+        already_linked: 'У тебя уже есть зарегистрированный аккаунт.',
+        not_in_clan: 'Игрок не найден в составе подключённого клана. Проверь тег или обратись к администратору.',
+        not_configured: 'Администратор ещё не подключил группу и клан. Нужно добавить бота в группу и выполнить /setup #ТЕГ_КЛАНА.',
+      };
+      if (result.status !== 'linked') { await ctx.reply(replies[result.status], { reply_markup: menu() }); return; }
+      await ctx.reply(`Зарегистрирован: ${result.player!.name} (${result.player!.tag}).\nКлан: ${result.player!.clan!.name}.\nРегистрация по составу клана, без подтверждения владения аккаунтом.`, { reply_markup: menu() });
+      try {
+        const checked = await sync.run({ user: id });
+        if (checked.busy || checked.partial || checked.failed) await ctx.reply('Регистрация сохранена. Проверка тегов продолжится автоматически.');
+      } catch { await ctx.reply('Регистрация сохранена. Теги проверю при следующей синхронизации.'); }
     } catch (error) { await ctx.reply(userError(error)); }
   });
 }

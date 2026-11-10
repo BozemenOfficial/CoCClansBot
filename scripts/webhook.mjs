@@ -22,7 +22,8 @@ try {
     { command: 'start', description: 'Главное меню' }, { command: 'link', description: 'Привязать аккаунт' },
     { command: 'profile', description: 'Мой профиль' }, { command: 'cancel', description: 'Отменить привязку' },
     { command: 'setup', description: 'Подключить клан: /setup #тег' }, { command: 'status', description: 'Состояние группы' },
-    { command: 'sync', description: 'Проверить теги группы' },
+    { command: 'sync', description: 'Проверить участников группы' },
+    { command: 'reviews', description: 'Участники на проверке у администратора' },
   ] });
   await api('setWebhook', {
     url: WEBHOOK_URL, secret_token: WEBHOOK_SECRET, max_connections: 1,

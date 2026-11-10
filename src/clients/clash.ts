@@ -3,7 +3,10 @@ import type { Config } from '../config';
 import { ServiceError } from '../errors';
 import type { Fetcher } from './http';
 
-const clanSchema = z.object({ tag: z.string(), name: z.string().max(100) });
+const clanSchema = z.object({ tag: z.string(), name: z.string().max(100),
+  members: z.number().int().min(0).max(50).optional(),
+  memberList: z.array(z.object({ tag: z.string() })).max(50).optional(),
+});
 const playerSchema = z.object({
   tag: z.string(), name: z.string().max(100),
   townHallLevel: z.number().int(), expLevel: z.number().int(), trophies: z.number().int(),
@@ -21,6 +24,7 @@ export interface ClashApi {
 
 export class ClashClient implements ClashApi {
   private readonly players = new Map<string, Player>();
+  private readonly clans = new Map<string, Clan>();
   get available(): boolean { return this.config.COC_TRANSPORT !== 'disabled'; }
   constructor(private readonly config: Config, private readonly request: Fetcher = fetch) {}
 
@@ -60,8 +64,11 @@ export class ClashClient implements ClashApi {
     return result.data;
   }
   async clan(tag: string): Promise<Clan> {
+    const cached = this.clans.get(tag);
+    if (cached) return cached;
     const result = clanSchema.safeParse(await this.call(`/clans/${encodeURIComponent(tag)}`));
     if (!result.success || result.data.tag !== tag) throw new ServiceError('invalid_response');
+    this.clans.set(tag, result.data);
     return result.data;
   }
   async verify(tag: string, token: string): Promise<boolean> {

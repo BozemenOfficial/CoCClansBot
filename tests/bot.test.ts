@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
     if (url.includes('clashofclans.com')) {
       if (url.endsWith('verifytoken')) return Response.json({ status: 'ok' });
-      if (url.includes('/clans/')) return Response.json(player.clan);
+      if (url.includes('/clans/')) return Response.json({ ...player.clan, members: 1, memberList: [{ tag: player.tag }] });
       return Response.json(player);
     }
     const method = url.split('/').at(-1)!;
@@ -22,7 +22,7 @@ beforeEach(() => {
     calls.push({ method, body });
     let result: unknown = true;
     if (method === 'getMe') result = { id: 999, is_bot: true, first_name: 'Bot', username: 'clans_test_bot' };
-    if (method === 'getChatMember') result = { status: body.user_id === 999 || admin ? 'administrator' : 'member', can_manage_tags: true, user: { id: body.user_id, is_bot: false, first_name: 'User' } };
+    if (method === 'getChatMember') result = { status: body.user_id === 999 || admin ? 'administrator' : 'member', can_manage_tags: true, can_restrict_members: true, user: { id: body.user_id, is_bot: false, first_name: 'User' } };
     if (method === 'sendMessage') result = { message_id: 1, date: 1, chat: { id: body.chat_id, type: 'private' }, text: body.text };
     return Response.json({ ok: true, result });
   }));
@@ -49,10 +49,12 @@ async function bot() {
 it('completes the private chat binding flow through real grammY handlers', async () => {
   const app = await bot();
   await app.handleUpdate(message('/link'));
+  await db.store.user(10);
+  await db.store.setup(-100, 'Group', 10, { ...player.clan!, members: 1, memberList: [{ tag: player.tag }] });
   await app.handleUpdate(message('#P0Y'));
-  await app.handleUpdate(message('ABC12345'));
   expect((await db.store.link(10))?.player_tag).toBe('#P0Y');
-  expect(calls.some((c) => c.method === 'deleteMessage')).toBe(true);
+  expect(calls.some((c) => c.method === 'deleteMessage')).toBe(false);
+  expect((await db.store.link(10))?.registration_kind).toBe('clan_roster');
   expect(calls.filter((c) => c.method === 'sendMessage').some((c) => String(c.body.text).includes('ABC12345'))).toBe(false);
   await app.handleUpdate(message('/profile'));
   expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('Ратуша: 16'))).toBe(true);
@@ -95,4 +97,17 @@ it('keeps the menu available and does not request player tokens when the game in
   await app.handleUpdate(message('/link'));
   expect(await db.store.conversation(10)).toBeNull();
   expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('подключение к Clash of Clans ещё не настроено'))).toBe(true);
+});
+
+it('denies review callbacks from ordinary members and lists reviews only to admins', async () => {
+  const app = await bot();
+  await app.handleUpdate({ update_id: 20, callback_query: {
+    id: 'review', from: { id: 10, is_bot: false, first_name: 'User' }, chat_instance: 'group',
+    data: 'mod:allow:1', message: { message_id: 1, date: 1, chat: { id: -100, type: 'supergroup', title: 'Group' } },
+  } });
+  expect(calls.some((c) => c.method === 'answerCallbackQuery' && c.body.show_alert === true)).toBe(true);
+  expect(calls.some((c) => c.method === 'restrictChatMember')).toBe(false);
+  admin = true;
+  await app.handleUpdate(message('/reviews', true));
+  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('Нет участников'))).toBe(true);
 });

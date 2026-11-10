@@ -2,12 +2,17 @@ import type { ClashApi } from '../clients/clash';
 import type { RequestBudget } from '../clients/http';
 import { Store, type Group, type Link } from '../db/store';
 import { ServiceError } from '../errors';
+import type { ModerationService } from './moderation';
 import { memberTag } from '../validation/player';
 
 export interface Member {
   status: string;
   is_member?: boolean;
   can_manage_tags?: boolean;
+  can_restrict_members?: boolean;
+  until_date?: number;
+  can_send_messages?: boolean;
+  user?: { is_bot?: boolean };
   tag?: string;
 }
 export interface TelegramApi {
@@ -24,6 +29,7 @@ export class SyncService {
     private readonly botId: number,
     private readonly budget: RequestBudget,
     private readonly batchSize: number,
+    private readonly moderation?: ModerationService,
   ) {}
 
   async run(options: { user?: number; chat?: number } = {}): Promise<SyncResult> {
@@ -31,12 +37,13 @@ export class SyncService {
     const owner = crypto.randomUUID();
     if (!await this.store.lease('sync', owner)) return { ...result, busy: true };
     try {
+      this.moderation?.beginPass();
       const groups = options.chat === undefined ? await this.store.groups() : [await this.store.group(options.chat)].filter((g): g is Group => g !== null);
       if (!groups.length) return result;
       const links = options.chat !== undefined
         ? await this.store.manualBatch(options.chat, this.batchSize + 1)
         : await this.store.due(this.batchSize + 1, options.user);
-      const permissions = new Map<number, boolean>();
+      const permissions = new Map<number, Member>();
       for (const link of links.slice(0, this.batchSize)) {
         if (this.budget.available < 5) { result.partial = true; break; }
         const complete = await this.syncPlayer(link, groups, permissions, options, result);
@@ -50,7 +57,7 @@ export class SyncService {
     }
   }
 
-  private async syncPlayer(link: Link, groups: Group[], permissions: Map<number, boolean>,
+  private async syncPlayer(link: Link, groups: Group[], permissions: Map<number, Member>,
     options: { user?: number; chat?: number }, result: SyncResult): Promise<boolean> {
     try {
       const player = await this.clash.player(link.player_tag);
@@ -66,9 +73,10 @@ export class SyncService {
         try {
           if (!permissions.has(group.chat_id)) {
             const bot = await this.telegram.getChatMember(group.chat_id, this.botId);
-            permissions.set(group.chat_id, bot.status === 'administrator' && bot.can_manage_tags === true);
+            permissions.set(group.chat_id, bot);
           }
-          if (!permissions.get(group.chat_id)) {
+          const rights = permissions.get(group.chat_id)!;
+          if (rights.status !== 'administrator') {
             await this.store.saveState(group.chat_id, link.telegram_id, null, 'missing_rights');
             result.skipped++;
             continue;
@@ -84,13 +92,19 @@ export class SyncService {
             result.skipped++;
             continue;
           }
+          const moderation = await this.moderation?.check(group, link, player, member, rights);
+          if (!rights.can_manage_tags) {
+            await this.store.saveState(group.chat_id, link.telegram_id, null, moderation ?? 'missing_rights');
+            result.skipped++;
+            continue;
+          }
           const tag = memberTag(player.name);
           // The live tag lets us repair manual edits and re-joins as well as nickname changes.
           if (member.tag !== tag) {
             await this.telegram.setChatMemberTag(group.chat_id, link.telegram_id, tag);
             result.updated++;
           }
-          await this.store.saveState(group.chat_id, link.telegram_id, tag, 'ok');
+          await this.store.saveState(group.chat_id, link.telegram_id, tag, moderation ?? 'ok');
         } catch (error) {
           if (error instanceof ServiceError && error.code === 'budget_exhausted') {
             if (options.chat === undefined) await this.store.groupCursor(player.tag, i);
