@@ -1,0 +1,10 @@
+{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "files.exclude": { "**/node_modules": true, "**/.wrangler": true, "**/dist": true },
+    "search.exclude": { "**/pnpm-lock.yaml": true },
+    "editor.tabSize": 2
+  },
+  "extensions": { "recommendations": ["dbaeumer.vscode-eslint"] }
+}

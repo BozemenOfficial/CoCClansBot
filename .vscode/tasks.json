@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Check project", "type": "process", "command": "pnpm", "args": ["check"], "group": { "kind": "build", "isDefault": true }, "problemMatcher": [] },
+    { "label": "Run Worker locally", "type": "process", "command": "pnpm", "args": ["dev"], "problemMatcher": [] },
+    { "label": "Apply local migrations", "type": "process", "command": "pnpm", "args": ["db:local"], "problemMatcher": [] }
+  ]
+}
