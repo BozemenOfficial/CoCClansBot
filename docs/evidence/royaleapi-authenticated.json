@@ -1,0 +1,24 @@
+{
+  "checked_at": "2026-11-10T17:36:45.286258+00:00",
+  "transport": "royaleapi",
+  "clan_search_http": 200,
+  "clan_http": 200,
+  "player_http": 200,
+  "player_tag_matched": true,
+  "synthetic_invalid_verification": [
+    {
+      "http": 200,
+      "status": "invalid"
+    },
+    {
+      "http": 200,
+      "status": "invalid"
+    },
+    {
+      "http": 200,
+      "status": "invalid"
+    }
+  ],
+  "valid_player_token_test": "pending owner interaction in Telegram",
+  "credentials_recorded": false
+}

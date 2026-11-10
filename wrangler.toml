@@ -8,9 +8,8 @@ workers_dev = true
 crons = ["*/30 * * * *"]
 
 [vars]
-COC_API_BASE_URL = "https://api.clashofclans.com/v1"
-# Switch to gateway or direct after configuring Clash API credentials.
-COC_TRANSPORT = "disabled"
+COC_API_BASE_URL = "https://cocproxy.royaleapi.dev/v1"
+COC_TRANSPORT = "royaleapi"
 SYNC_BATCH_SIZE = "8"
 
 [[d1_databases]]
