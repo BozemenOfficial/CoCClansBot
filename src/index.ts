@@ -1,0 +1,61 @@
+import type { Update } from 'grammy/types';
+import { readConfig, type Env } from './config';
+import { Store } from './db/store';
+import { RequestBudget } from './clients/http';
+import { createBot } from './bot/create';
+import { actor, readUpdate, validSecret } from './webhook';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/health') return Response.json({ ok: true });
+    if (url.pathname !== '/webhook') return new Response('Not found', { status: 404 });
+    if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+    if (!await validSecret(request.headers.get('X-Telegram-Bot-Api-Secret-Token'), env.WEBHOOK_SECRET ?? '')) return new Response('Forbidden', { status: 403 });
+    const update = await readUpdate(request);
+    if (!update) return new Response('Invalid update', { status: 400 });
+    const store = new Store(env.DB);
+    const owner = crypto.randomUUID();
+    let claimed = false;
+    let userLease: string | null = null;
+    try {
+      const config = readConfig(env);
+      const claim = await store.claim(update.update_id, owner);
+      if (claim === 'done') return new Response('OK');
+      if (claim === 'busy') return new Response('Retry later', { status: 503 });
+      claimed = true;
+      const id = actor(update);
+      if (id !== null) {
+        const name = `user:${id}`;
+        if (!await store.lease(name, owner)) {
+          await store.abandon(update.update_id, owner);
+          claimed = false;
+          return new Response('Retry later', { status: 503 });
+        }
+        userLease = name;
+      }
+      const { bot } = createBot(config, store, new RequestBudget());
+      bot.botInfo = await bot.api.getMe();
+      await bot.handleUpdate(update as Update);
+      await store.finish(update.update_id, owner);
+      return new Response('OK');
+    } catch {
+      // Telegram errors can contain the whole update or token-bearing request payload.
+      console.error('webhook_failed');
+      if (claimed) await store.abandon(update.update_id, owner);
+      return new Response('Retry later', { status: 503 });
+    } finally {
+      if (userLease) await store.release(userLease, owner);
+    }
+  },
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    const config = readConfig(env);
+    const store = new Store(env.DB);
+    const { sync } = createBot(config, store, new RequestBudget());
+    try {
+      const result = await sync.run();
+      console.info('scheduled_sync', JSON.stringify(result));
+      await store.cleanup();
+    } catch { console.error('scheduled_sync_failed'); throw new Error('scheduled_sync_failed'); }
+  },
+} satisfies ExportedHandler<Env>;

@@ -1,0 +1,20 @@
+name = "coc-clans-bot"
+main = "src/index.ts"
+compatibility_date = "2026-11-10"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+COC_API_BASE_URL = "https://api.clashofclans.com/v1"
+COC_TRANSPORT = "direct"
+SYNC_BATCH_SIZE = "8"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "coc-clans-bot"
+# Replace with the ID printed by: pnpm exec wrangler d1 create coc-clans-bot
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

@@ -1,0 +1,35 @@
+{
+  "name": "coc-clans-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "db:local": "wrangler d1 migrations apply coc-clans-bot --local",
+    "db:remote": "wrangler d1 migrations apply coc-clans-bot --remote",
+    "deploy": "wrangler deploy",
+    "webhook": "node --env-file=.dev.vars scripts/webhook.mjs"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261109.1",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.159.0"
+  }
+}
