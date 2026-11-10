@@ -14,7 +14,7 @@ export interface Env {
 const schema = z.object({
   BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/),
   WEBHOOK_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/),
-  COC_TRANSPORT: z.enum(['direct', 'gateway', 'disabled']).default('direct'),
+  COC_TRANSPORT: z.enum(['direct', 'royaleapi', 'gateway', 'disabled']).default('direct'),
   COC_API_BASE_URL: z.url().default('https://api.clashofclans.com/v1'),
   COC_API_TOKEN: z.string().min(1).optional(),
   COC_GATEWAY_TOKEN: z.string().min(1).optional(),
@@ -24,9 +24,12 @@ const schema = z.object({
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
     ctx.addIssue({ code: 'custom', message: 'Invalid API URL' });
   }
-  if (v.COC_TRANSPORT === 'direct' &&
-      (url.origin !== 'https://api.clashofclans.com' || url.pathname.replace(/\/$/, '') !== '/v1' || !v.COC_API_TOKEN)) {
-    ctx.addIssue({ code: 'custom', message: 'Direct transport requires official URL and API key' });
+  if (v.COC_TRANSPORT === 'direct' || v.COC_TRANSPORT === 'royaleapi') {
+    const allowedOrigin = v.COC_TRANSPORT === 'direct'
+      ? 'https://api.clashofclans.com' : 'https://cocproxy.royaleapi.dev';
+    if (url.origin !== allowedOrigin || url.pathname.replace(/\/$/, '') !== '/v1' || !v.COC_API_TOKEN) {
+      ctx.addIssue({ code: 'custom', message: 'Selected transport requires its pinned API URL and developer key' });
+    }
   }
   if (v.COC_TRANSPORT === 'gateway' && !v.COC_GATEWAY_TOKEN) {
     ctx.addIssue({ code: 'custom', message: 'Gateway credential required' });

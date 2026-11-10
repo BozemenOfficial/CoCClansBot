@@ -62,3 +62,17 @@ it('blocks redirects explicitly using a redirect mode supported by Workers', asy
   expect(request).toHaveBeenCalledTimes(1);
   expect((request.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
 });
+
+it('supports RoyaleAPI only when its fixed HTTPS origin is explicitly selected', async () => {
+  const cfg = readConfig({ DB: {} as D1Database, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32),
+    COC_TRANSPORT: 'royaleapi', COC_API_BASE_URL: 'https://cocproxy.royaleapi.dev/v1', COC_API_TOKEN: 'dedicated-royale-key' });
+  const request = vi.fn<typeof fetch>(async () => Response.json(player));
+  await new ClashClient(cfg, request).player('#P0Y');
+  expect(request).toHaveBeenCalledWith('https://cocproxy.royaleapi.dev/v1/players/%23P0Y', expect.objectContaining({
+    headers: expect.objectContaining({ Authorization: 'Bearer dedicated-royale-key' }), redirect: 'manual',
+  }));
+});
+it.each(['https://untrusted.example/v1', 'https://api.clashofclans.com/v1', 'https://cocproxy.royaleapi.dev/other'])('rejects the wrong URL for RoyaleAPI: %s', (url) => {
+  expect(() => readConfig({ DB: {} as D1Database, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32),
+    COC_TRANSPORT: 'royaleapi', COC_API_BASE_URL: url, COC_API_TOKEN: 'dedicated-royale-key' })).toThrow('invalid_configuration');
+});

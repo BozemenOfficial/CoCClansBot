@@ -1,0 +1,18 @@
+{
+  "checked_on": "2026-11-10",
+  "sources": {
+    "cloudflare_dedicated_egress": "https://developers.cloudflare.com/cloudflare-one/traffic-controls/egress-policies/dedicated-egress-ips/",
+    "cloudflare_vpc": "https://developers.cloudflare.com/workers-vpc/configuration/vpc-networks/",
+    "render_outbound": "https://render.com/docs/outbound-ip-addresses",
+    "render_dedicated": "https://render.com/docs/dedicated-ips",
+    "railway_static": "https://docs.railway.com/networking/static-outbound-ips",
+    "koyeb_faq": "https://www.koyeb.com/docs/faqs/general",
+    "oracle_always_free": "https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm",
+    "google_ipv4_pricing": "https://cloud.google.com/vpc/network-pricing",
+    "royaleapi_proxy": "https://docs.royaleapi.com/proxy",
+    "clashking_api": "https://api.clashk.ing/openapi.json",
+    "clashking_proxy_source": "https://github.com/ClashKingInc/ClashKingApp/blob/main/expo/src/core/config/api-config.ts",
+    "containers_networking": "https://developers.cloudflare.com/containers/configuration/outbound-traffic/"
+  },
+  "method": "Provider documentation, provider-owned source code and unauthenticated live probes. No paid resource provisioning or real key verification."
+}

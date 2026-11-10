@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-11-10T17:24:52.630786+00:00",
+  "temporary_worker": "coc-clans-connection-lab",
+  "temporary_worker_deleted": true,
+  "production_worker_exists": true,
+  "production_health_status": 200,
+  "production_transport_changed": false
+}

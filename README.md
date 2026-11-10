@@ -2,6 +2,8 @@
 
 Telegram-бот для кланов Clash of Clans. Игрок подтверждает свой аккаунт через API Token из игры, а бот ставит его игровой ник в тег участника Telegram-группы.
 
+Подключение к игре: [сравнение вариантов и результаты живых проб](docs/connection-options.md).
+
 ## Текущее подключение
 
 Бот развёрнут в Cloudflare: [@CoCClansBot](https://t.me/CoCClansBot). Worker: [coc-clans-bot.loopnexo.workers.dev](https://coc-clans-bot.loopnexo.workers.dev/health). База D1 подключена, миграции применены, Telegram webhook зарегистрирован.

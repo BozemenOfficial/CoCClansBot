@@ -1,0 +1,137 @@
+{
+  "observed_at": "2026-11-10T17:16:11.137Z",
+  "topology": "execution environment -> loopback Node gateway -> official Supercell API",
+  "authenticated_with_supercell": false,
+  "synthetic_developer_key": true,
+  "note": "This verifies gateway authentication, routing and real outbound HTTP. It does not establish a static IP, production HTTPS, successful player reads or verifytoken correctness.",
+  "rows": [
+    {
+      "operation": "unauthorized_client",
+      "status": 401
+    },
+    {
+      "operation": "unknown_route",
+      "status": 404
+    },
+    {
+      "round": 1,
+      "operation": "profile",
+      "status": 403,
+      "elapsed_ms": 401,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 1,
+      "operation": "verify_a",
+      "status": 403,
+      "elapsed_ms": 218,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 1,
+      "operation": "verify_b",
+      "status": 403,
+      "elapsed_ms": 147,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 2,
+      "operation": "profile",
+      "status": 403,
+      "elapsed_ms": 103,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 2,
+      "operation": "verify_a",
+      "status": 403,
+      "elapsed_ms": 111,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 2,
+      "operation": "verify_b",
+      "status": 403,
+      "elapsed_ms": 115,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 3,
+      "operation": "profile",
+      "status": 403,
+      "elapsed_ms": 71,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 3,
+      "operation": "verify_a",
+      "status": 403,
+      "elapsed_ms": 70,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 3,
+      "operation": "verify_b",
+      "status": 403,
+      "elapsed_ms": 107,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 4,
+      "operation": "profile",
+      "status": 403,
+      "elapsed_ms": 123,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 4,
+      "operation": "verify_a",
+      "status": 403,
+      "elapsed_ms": 95,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 4,
+      "operation": "verify_b",
+      "status": 403,
+      "elapsed_ms": 79,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 5,
+      "operation": "profile",
+      "status": 403,
+      "elapsed_ms": 72,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 5,
+      "operation": "verify_a",
+      "status": 403,
+      "elapsed_ms": 124,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    },
+    {
+      "round": 5,
+      "operation": "verify_b",
+      "status": 403,
+      "elapsed_ms": 97,
+      "upstream_status": 403,
+      "cache_control": "no-store"
+    }
+  ]
+}
