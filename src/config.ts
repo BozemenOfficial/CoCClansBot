@@ -14,7 +14,7 @@ export interface Env {
 const schema = z.object({
   BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/),
   WEBHOOK_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/),
-  COC_TRANSPORT: z.enum(['direct', 'gateway']).default('direct'),
+  COC_TRANSPORT: z.enum(['direct', 'gateway', 'disabled']).default('direct'),
   COC_API_BASE_URL: z.url().default('https://api.clashofclans.com/v1'),
   COC_API_TOKEN: z.string().min(1).optional(),
   COC_GATEWAY_TOKEN: z.string().min(1).optional(),

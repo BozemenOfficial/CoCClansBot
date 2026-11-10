@@ -13,6 +13,7 @@ const playerSchema = z.object({
 export type Player = z.infer<typeof playerSchema>;
 export type Clan = z.infer<typeof clanSchema>;
 export interface ClashApi {
+  readonly available?: boolean;
   player(tag: string): Promise<Player>;
   clan(tag: string): Promise<Clan>;
   verify(tag: string, token: string): Promise<boolean>;
@@ -20,9 +21,11 @@ export interface ClashApi {
 
 export class ClashClient implements ClashApi {
   private readonly players = new Map<string, Player>();
+  get available(): boolean { return this.config.COC_TRANSPORT !== 'disabled'; }
   constructor(private readonly config: Config, private readonly request: Fetcher = fetch) {}
 
   private async call(path: string, body?: object): Promise<unknown> {
+    if (!this.available) throw new ServiceError('integration_not_configured');
     const token = this.config.COC_TRANSPORT === 'gateway'
       ? this.config.COC_GATEWAY_TOKEN : this.config.COC_API_TOKEN;
     let response: Response;

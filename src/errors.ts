@@ -5,6 +5,7 @@ export class ServiceError extends Error {
 export function userError(error: unknown): string {
   if (error instanceof ServiceError) {
     switch (error.code) {
+      case 'integration_not_configured': return 'Игровые данные пока недоступны: подключение к Clash of Clans ещё не настроено.';
       case 'not_found': return 'Игрок или клан не найден. Проверь тег.';
       case 'rate_limited': return 'Слишком много запросов. Попробуй через минуту.';
       case 'access_denied': return 'Нет доступа к Clash API. Администратору нужно проверить ключ и разрешённый IP.';

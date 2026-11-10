@@ -86,3 +86,13 @@ it('rejects unauthenticated webhooks and deduplicates accepted updates', async (
   expect((await worker.fetch(request(env.WEBHOOK_SECRET), env)).status).toBe(200);
   expect(calls.filter((c) => c.method === 'sendMessage')).toHaveLength(replies);
 });
+
+it('keeps the menu available and does not request player tokens when the game integration is disabled', async () => {
+  const config = readConfig({ DB: db.store.db, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_TRANSPORT: 'disabled' });
+  const { bot: app } = createBot(config, db.store, new RequestBudget());
+  app.botInfo = await app.api.getMe();
+  await app.handleUpdate(message('/start'));
+  await app.handleUpdate(message('/link'));
+  expect(await db.store.conversation(10)).toBeNull();
+  expect(calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('подключение к Clash of Clans ещё не настроено'))).toBe(true);
+});

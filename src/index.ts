@@ -51,6 +51,11 @@ export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
     const config = readConfig(env);
     const store = new Store(env.DB);
+    if (config.COC_TRANSPORT === 'disabled') {
+      await store.cleanup();
+      console.info('scheduled_sync_skipped: clash_api_not_configured');
+      return;
+    }
     const { sync } = createBot(config, store, new RequestBudget());
     try {
       const result = await sync.run();

@@ -43,3 +43,13 @@ describe('Clash transport', () => {
     expect(() => readConfig({ DB: {} as D1Database, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_API_TOKEN: 'key', COC_API_BASE_URL: 'https://unknown.example/v1' })).toThrow('invalid_configuration');
   });
 });
+
+it('allows the Telegram service to run before Clash API is configured, without sending upstream requests', async () => {
+  const cfg = readConfig({ DB: {} as D1Database, BOT_TOKEN: '999:test', WEBHOOK_SECRET: 's'.repeat(32), COC_TRANSPORT: 'disabled' });
+  const request = vi.fn();
+  const client = new ClashClient(cfg, fakeFetch(request));
+  expect(client.available).toBe(false);
+  await expect(client.player('#P0Y')).rejects.toMatchObject({ code: 'integration_not_configured' });
+  await expect(client.verify('#P0Y', 'ABC12345')).rejects.toMatchObject({ code: 'integration_not_configured' });
+  expect(request).not.toHaveBeenCalled();
+});

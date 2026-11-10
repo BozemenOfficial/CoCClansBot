@@ -18,6 +18,7 @@ export function playerHandlers(bot: Bot, store: Store, clash: ClashApi, sync: Sy
 
   const startLink = async (ctx: Context) => {
     if (!await privateOnly(ctx) || !ctx.from) return;
+    if (clash.available === false) { await ctx.reply('Привязка пока недоступна: подключение к Clash of Clans ещё не настроено.', { reply_markup: menu() }); return; }
     if (await store.limited(`link:${ctx.from.id}`, 10, 3600)) { await ctx.reply('Слишком много попыток. Вернись к привязке позже.'); return; }
     if (!await linking.begin(ctx.from.id)) {
       await ctx.reply('Аккаунт уже привязан. Посмотреть его можно в профиле.', { reply_markup: menu() }); return;
@@ -40,7 +41,7 @@ export function playerHandlers(bot: Bot, store: Store, clash: ClashApi, sync: Sy
 
   bot.command('start', async (ctx) => {
     if (!await privateOnly(ctx)) return;
-    await ctx.reply('Привет! Я связываю игровой аккаунт с Telegram и ставлю игровой ник в тег участника группы.\nНачни с привязки аккаунта.', { reply_markup: menu() });
+    await ctx.reply('Привет! Я связываю игровой аккаунт с Telegram и ставлю игровой ник в тег участника группы.' + (clash.available === false ? '\n\nПодключение к игре пока не настроено. Меню уже доступно, а привязка и игровые данные заработают после подключения.' : '\nНачни с привязки аккаунта.'), { reply_markup: menu() });
   });
   bot.command('help', (ctx) => ctx.reply('В личном чате: /start, /link, /profile, /cancel.\nВ группе для администраторов: /setup #ТЕГ_КЛАНА, /status, /sync.\nБот не удаляет участников из группы.'));
   bot.command('link', startLink);

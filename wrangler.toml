@@ -9,12 +9,12 @@ crons = ["*/30 * * * *"]
 
 [vars]
 COC_API_BASE_URL = "https://api.clashofclans.com/v1"
-COC_TRANSPORT = "direct"
+# Switch to gateway or direct after configuring Clash API credentials.
+COC_TRANSPORT = "disabled"
 SYNC_BATCH_SIZE = "8"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "coc-clans-bot"
-# Replace with the ID printed by: pnpm exec wrangler d1 create coc-clans-bot
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "62280b79-613d-4cfa-a8c0-a0fb607feaa3"
 migrations_dir = "migrations"
